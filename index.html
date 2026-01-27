@@ -1,41 +1,597 @@
 <!DOCTYPE html>
-<html lang="pt-pt">
+<html lang="pt">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lista de Presentes - Areli & Jordan</title>
-    
-    <!-- React & Babel -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gestão de Louvor Almanara</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Pinyon+Script&family=Playfair+Display:wght@400;600;700;900&display=swap" rel="stylesheet">
-
-    <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-
+    <!-- React and Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .font-serif { font-family: 'Playfair Display', serif; }
-        .font-script { font-family: 'Pinyon Script', cursive; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        
+        :root {
+            --sat: env(safe-area-inset-top);
+            --sab: env(safe-area-inset-bottom);
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        .animate-in { animation: fadeIn 0.25s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .hymn-card-img { object-fit: cover; transition: transform 0.3s ease; }
+        
+        /* Ajuste para inputs não darem zoom no iOS */
+        input, select, textarea { font-size: 16px !important; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        
+        .safe-pb { padding-bottom: calc(1.5rem + var(--sab)); }
+        .safe-pt { padding-top: calc(1rem + var(--sat)); }
     </style>
 </head>
-<body class="bg-[#f4f5f0] text-[#2f3b1c]">
+<body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
 
-    <script type="text/babel">
-        // TODO: Código React completo conforme enviado pelo usuário
-        // O conteúdo foi mantido conforme fornecido.
-        ...
+    <script type="text/babel" data-type="module">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- FIREBASE IMPORTS ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // Configuração do Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyD7VpO1AlbVwN60N1TPn0QepcBi6F5CgRg",
+            authDomain: "gestaodelouvoralmanara.firebaseapp.com",
+            projectId: "gestaodelouvoralmanara",
+            storageBucket: "gestaodelouvoralmanara.firebasestorage.app",
+            messagingSenderId: "967352802208",
+            appId: "1:967352802208:web:9077952f70efba96da62c5",
+            measurementId: "G-C01MQW10K5"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'louvor-almanara-2025';
+
+        const STATIC_JOVENS = [
+            { id: 'j01', name: 'Aleluia, Salvação e Glória', artist: 'Hino', category: 'jovens' },
+            { id: 'j02', name: 'Alfa e Ômega', artist: 'Coral Resgate', category: 'jovens' },
+            { id: 'j03', name: 'Alfa e Ômega', artist: 'Marine Friesen', category: 'jovens' },
+            { id: 'j04', name: 'Ao Que Vencer', artist: 'Rejoicing', category: 'jovens' },
+            { id: 'j05', name: 'Autor da minha fé', artist: 'Grupo Elo', category: 'jovens' },
+            { id: 'j06', name: 'Bem Mais Que Tudo', artist: 'Aline Barros', category: 'jovens' },
+            { id: 'j07', name: 'Calvário', artist: 'Kades Singers', category: 'jovens' },
+            { id: 'j08', name: 'Cicatrizes', artist: 'Bruna Karla', category: 'jovens' },
+            { id: 'j09', name: 'Colossenses e suas linhas de amor', artist: 'Fhop Music', category: 'jovens' },
+            { id: 'j10', name: 'Coração Valente', artist: 'Anderson Freire', category: 'jovens' },
+            { id: 'j11', name: 'Deus Pode', artist: 'Jéssica Augusto', category: 'jovens' },
+            { id: 'j14', name: 'Ele Vem', artist: 'Kemuel', category: 'jovens' },
+            { id: 'j15', name: 'Eu Me Alegro em Ti', artist: 'IBAB', category: 'jovens' },
+            { id: 'j20', name: 'Há Um Lugar', artist: 'Renascer Praise', category: 'jovens' },
+            { id: 'j23', name: 'João Viu / Só Tu És Santo', artist: 'Pedro Henrique', category: 'jovens' },
+            { id: 'j26', name: 'Louve e Adore', artist: 'Michelle Nascimento', category: 'jovens' },
+            { id: 'j30', name: 'Na Tua Presença', artist: 'Renascer Praise', category: 'jovens' },
+            { id: 'j35', name: 'O lamento de Israel', artist: 'Sergio Lopes', category: 'jovens' },
+            { id: 'j42', name: 'Quem é esse', artist: 'Julliany Souza', category: 'jovens' },
+            { id: 'j43', name: 'Redentor', artist: 'Coral Resgate', category: 'jovens' },
+            { id: 'j47', name: 'Santo', artist: 'Ekklesia', category: 'jovens' },
+            { id: 'j49', name: 'Sentimento Novo', artist: 'Renascer Praise', category: 'jovens' },
+            { id: 'j53', name: 'Teu Amor', artist: 'Voice Soul', category: 'jovens' },
+            { id: 'j58', name: 'Vem Espírito', artist: 'Renascer Praise', category: 'jovens' },
+            { id: 'j60', name: 'Yahweh', artist: 'One Service', category: 'jovens' }
+        ];
+
+        const HARMONIC_SCALE = [
+            'C', 'Cm', 'C#', 'C#m', 'D', 'Dm', 'D#', 'D#m', 
+            'E', 'Em', 'F', 'Fm', 'F#', 'F#m', 'G', 'Gm', 
+            'G#', 'G#m', 'A', 'Am', 'A#', 'A#m', 'B', 'Bm'
+        ];
+
+        const CATEGORY_LABELS = {
+            jovens: { label: 'Jovens', color: 'bg-blue-600', light: 'bg-blue-50 text-blue-600' },
+            adolescentes: { label: 'Adolescentes', color: 'bg-rose-500', light: 'bg-rose-50 text-rose-600' },
+            integrado: { label: 'Integrado', color: 'bg-orange-500', light: 'bg-orange-50 text-orange-600' }
+        };
+
+        const ADMIN_PIN = "2025";
+
+        const getYoutubeId = (url) => {
+            if (!url) return null;
+            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[2].length === 11) ? match[2] : null;
+        };
+
+        const getYoutubeThumbnail = (url) => {
+            const id = getYoutubeId(url);
+            return id ? `https://img.youtube.com/vi/${id}/mqdefault.jpg` : null;
+        };
+
+        const Icon = ({ name, className = "w-4 h-4" }) => {
+            const containerRef = useRef(null);
+            useEffect(() => { 
+                if (window.lucide && containerRef.current) {
+                    containerRef.current.innerHTML = `<i data-lucide="${name}"></i>`;
+                    window.lucide.createIcons({ root: containerRef.current, attrs: { class: className } });
+                }
+            }, [name, className]);
+            return <span ref={containerRef} className="inline-flex items-center justify-center"></span>;
+        };
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [isAdmin, setIsAdmin] = useState(false);
+            const [activeTab, setActiveTab] = useState('jovens');
+            const [searchTerm, setSearchTerm] = useState('');
+            const [selectedHymn, setSelectedHymn] = useState(null);
+            const [hymnSettings, setHymnSettings] = useState({});
+            const [customHymns, setCustomHymns] = useState([]);
+            const [hiddenHymns, setHiddenHymns] = useState({});
+            
+            const [tempName, setTempName] = useState('');
+            const [tempArtist, setTempArtist] = useState('');
+            const [tempKey, setTempKey] = useState('');
+            const [tempYoutube, setTempYoutube] = useState('');
+            const [tempCategory, setTempCategory] = useState('');
+            
+            const [loading, setLoading] = useState(true);
+            const [isSaving, setIsSaving] = useState(false);
+            const [toast, setToast] = useState({ show: false, msg: '' });
+            const [modals, setModals] = useState({ add: false, admin: false, delete: null });
+            
+            const [form, setForm] = useState({ 
+                name: '', artist: '', category: 'jovens', youtubeUrl: '', key: '', pin: '' 
+            });
+
+            // Lógica de Autenticação Robusta (Regra 3)
+            useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        // Tenta usar o token customizado, mas ignora mismatch se as credenciais manuais forem diferentes
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            try {
+                                await signInWithCustomToken(auth, __initial_auth_token);
+                            } catch (tokenErr) {
+                                // Se o token não bater (mismatch), cai para anónimo
+                                await signInAnonymously(auth);
+                            }
+                        } else { 
+                            await signInAnonymously(auth); 
+                        }
+                    } catch (err) {
+                        console.error("Erro Crítico de Autenticação:", err);
+                    }
+                };
+                initAuth();
+                const unsubAuth = onAuthStateChanged(auth, (u) => { 
+                    setUser(u); 
+                    if (u) setLoading(false);
+                });
+                return () => unsubAuth();
+            }, []);
+
+            useEffect(() => {
+                if (!user) return;
+                const base = ['artifacts', appId, 'public', 'data'];
+                const unsubSettings = onSnapshot(collection(db, ...base, 'hymnSettings'), (snap) => {
+                    const data = {}; snap.forEach(d => data[d.id] = d.data());
+                    setHymnSettings(data);
+                });
+                const unsubCustom = onSnapshot(collection(db, ...base, 'customHymns'), (snap) => {
+                    const list = []; snap.forEach(d => list.push({ id: d.id, ...d.data() }));
+                    setCustomHymns(list);
+                });
+                const unsubHidden = onSnapshot(collection(db, ...base, 'hiddenHymns'), (snap) => {
+                    const data = {}; snap.forEach(d => data[d.id] = true);
+                    setHiddenHymns(data);
+                });
+                return () => { unsubSettings(); unsubCustom(); unsubHidden(); };
+            }, [user]);
+
+            const allHymns = useMemo(() => {
+                return [...STATIC_JOVENS, ...customHymns].filter(h => !hiddenHymns[h.id]);
+            }, [customHymns, hiddenHymns]);
+
+            const filteredList = useMemo(() => {
+                const queryStr = searchTerm.toLowerCase().trim();
+                const list = allHymns.map(h => {
+                    const s = hymnSettings[h.id];
+                    return {
+                        ...h,
+                        displayName: s?.name || h.name,
+                        displayArtist: s?.artist || h.artist,
+                        displayCategory: s?.category || h.category
+                    };
+                });
+                if (queryStr) {
+                    return list.filter(h => 
+                        h.displayName.toLowerCase().includes(queryStr) || 
+                        (h.displayArtist && h.displayArtist.toLowerCase().includes(queryStr))
+                    );
+                }
+                return list.filter(h => h.displayCategory === activeTab);
+            }, [searchTerm, activeTab, allHymns, hymnSettings]);
+
+            const showToast = (msg) => {
+                setToast({ show: true, msg });
+                setTimeout(() => setToast({ show: false, msg: '' }), 3000);
+            };
+
+            const handleSaveSettings = async () => {
+                if (!user || !selectedHymn) return;
+                setIsSaving(true);
+                try {
+                    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'hymnSettings', selectedHymn.id);
+                    await setDoc(docRef, { 
+                        name: tempName, artist: tempArtist, key: tempKey, 
+                        youtubeUrl: tempYoutube, category: tempCategory,
+                        updatedAt: serverTimestamp() 
+                    }, { merge: true });
+                    showToast("Salvo com sucesso!");
+                    setSelectedHymn(null);
+                } catch (e) { showToast("Erro ao salvar."); }
+                finally { setIsSaving(false); }
+            };
+
+            const handleAddHymn = async (e) => {
+                e.preventDefault();
+                if (!user || !form.name) return;
+                setIsSaving(true);
+                try {
+                    const docRef = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'customHymns'), {
+                        name: form.name, artist: form.artist || 'Desconhecido',
+                        category: form.category, createdAt: serverTimestamp()
+                    });
+                    if (form.key || form.youtubeUrl) {
+                        const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'hymnSettings', docRef.id);
+                        await setDoc(settingsRef, {
+                            key: form.key, youtubeUrl: form.youtubeUrl,
+                            category: form.category, updatedAt: serverTimestamp()
+                        });
+                    }
+                    showToast("Hino criado!");
+                    setForm({ name: '', artist: '', category: 'jovens', youtubeUrl: '', key: '', pin: '' });
+                    setModals({ ...modals, add: false });
+                } catch (e) { showToast("Erro ao criar."); }
+                finally { setIsSaving(false); }
+            };
+
+            const executeDelete = async () => {
+                const hymn = modals.delete;
+                if (!hymn || !isAdmin) return;
+                setIsSaving(true);
+                try {
+                    const isStatic = STATIC_JOVENS.some(h => h.id === hymn.id);
+                    if (isStatic) { 
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'hiddenHymns', hymn.id), { hidden: true }); 
+                    } else { 
+                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'customHymns', hymn.id)); 
+                    }
+                    showToast("Removido.");
+                    setModals({ ...modals, delete: null });
+                } catch (e) { showToast("Erro ao remover."); }
+                finally { setIsSaving(false); }
+            };
+
+            if (loading) return (
+                <div className="flex flex-col items-center justify-center min-h-screen bg-indigo-900 text-white p-8">
+                    <Icon name="music" className="w-16 h-16 animate-pulse opacity-20 mb-4" />
+                    <p className="font-bold tracking-widest text-[10px] uppercase opacity-50">Sincronizando Almanara...</p>
+                </div>
+            );
+
+            return (
+                <div className="min-h-screen bg-slate-50 text-slate-900">
+                    <header className="sticky top-0 z-40 bg-indigo-700 text-white shadow-lg border-b border-indigo-600/30">
+                        <div className="max-w-2xl mx-auto px-4 safe-pt pb-4">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 bg-white/10 rounded-xl flex items-center justify-center backdrop-blur-md">
+                                        <Icon name="music-2" className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h1 className="text-base font-black tracking-tight uppercase leading-none">Almanara</h1>
+                                        <p className="text-[8px] font-bold text-indigo-200 uppercase tracking-widest mt-0.5">Gestão de Repertório</p>
+                                    </div>
+                                </div>
+                                {isAdmin && (
+                                    <div className="flex items-center gap-1.5 bg-amber-400 text-amber-950 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider">
+                                        <Icon name="unlock" className="w-3 h-3" /> ADM
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <Icon name="search" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Pesquisar..."
+                                        className="w-full bg-indigo-800/40 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium placeholder-white/40 focus:ring-2 focus:ring-white/20 transition-all outline-none"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                    />
+                                </div>
+                                <button onClick={() => setModals({ ...modals, add: true })} className="bg-white text-indigo-700 p-2.5 rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center">
+                                    <Icon name="plus" className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    {!searchTerm && (
+                        <nav className="max-w-2xl mx-auto px-4 mt-4">
+                            <div className="flex p-1 bg-slate-200/60 rounded-xl gap-1 border border-slate-200/50 backdrop-blur-sm">
+                                {Object.keys(CATEGORY_LABELS).map((cat) => (
+                                    <button
+                                        key={cat}
+                                        onClick={() => setActiveTab(cat)}
+                                        className={`flex-1 py-2.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${activeTab === cat ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}
+                                    >
+                                        {CATEGORY_LABELS[cat].label}
+                                    </button>
+                                ))}
+                            </div>
+                        </nav>
+                    )}
+
+                    <main className="max-w-2xl mx-auto px-4 mt-4 space-y-2.5 pb-32">
+                        {filteredList.map((hymn) => {
+                            const settings = hymnSettings[hymn.id];
+                            const thumb = getYoutubeThumbnail(settings?.youtubeUrl);
+                            
+                            return (
+                                <div 
+                                    key={hymn.id}
+                                    onClick={() => { 
+                                        setSelectedHymn(hymn); 
+                                        setTempName(hymn.displayName);
+                                        setTempArtist(hymn.displayArtist);
+                                        setTempKey(settings?.key || '');
+                                        setTempYoutube(settings?.youtubeUrl || '');
+                                        setTempCategory(hymn.displayCategory);
+                                    }}
+                                    className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm active:bg-slate-50 transition-all cursor-pointer flex items-center gap-3 animate-in"
+                                >
+                                    <div className="w-14 h-14 rounded-xl bg-slate-100 flex-shrink-0 overflow-hidden relative flex items-center justify-center border border-slate-100">
+                                        {thumb ? (
+                                            <img src={thumb} className="hymn-card-img w-full h-full" alt="Capa" />
+                                        ) : (
+                                            <Icon name="music" className="w-5 h-5 text-slate-300" />
+                                        )}
+                                        {settings?.youtubeUrl && (
+                                            <div className="absolute bottom-1 right-1 bg-red-600 rounded-lg p-1 shadow-sm">
+                                                <Icon name="play" className="w-2 h-2 text-white fill-current" />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <h3 className="text-[13px] font-bold text-slate-800 uppercase tracking-tight truncate leading-tight">{hymn.displayName}</h3>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`text-[7px] font-black px-1.5 py-0.5 rounded uppercase shrink-0 ${CATEGORY_LABELS[hymn.displayCategory].light}`}>
+                                                {CATEGORY_LABELS[hymn.displayCategory].label}
+                                            </span>
+                                            <p className="text-[10px] font-medium text-slate-400 uppercase italic truncate tracking-wide">{hymn.displayArtist}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        {settings?.key && (
+                                            <div className="min-w-[34px] h-9 px-2 bg-indigo-600 text-white rounded-lg flex items-center justify-center shadow-md shadow-indigo-100 font-black text-[11px]">
+                                                {settings.key}
+                                            </div>
+                                        )}
+                                        {isAdmin && (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); setModals({...modals, delete: hymn}); }} 
+                                                className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                            >
+                                                <Icon name="trash-2" className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {filteredList.length === 0 && (
+                            <div className="py-20 text-center opacity-30">
+                                <Icon name="search" className="w-10 h-10 mx-auto mb-3" />
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Nenhum resultado</p>
+                            </div>
+                        )}
+                    </main>
+
+                    {selectedHymn && (
+                        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in">
+                            <div className="bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-3xl p-6 shadow-2xl overflow-y-auto max-h-[92vh] custom-scrollbar">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">Editar Louvor</h3>
+                                    <button onClick={() => setSelectedHymn(null)} className="p-2 text-slate-400 hover:text-slate-600"><Icon name="x" className="w-6 h-6" /></button>
+                                </div>
+
+                                <div className="space-y-5">
+                                    <div className="grid grid-cols-1 gap-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Título</label>
+                                            <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-semibold focus:border-indigo-500 outline-none transition-all" value={tempName} onChange={e => setTempName(e.target.value)} />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Artista</label>
+                                            <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-semibold focus:border-indigo-500 outline-none transition-all" value={tempArtist} onChange={e => setTempArtist(e.target.value)} />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">YouTube</label>
+                                        <input type="text" placeholder="https://..." className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3 px-4 text-sm focus:border-indigo-500 outline-none transition-all" value={tempYoutube} onChange={e => setTempYoutube(e.target.value)} />
+                                    </div>
+                                    
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Categoria</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {Object.keys(CATEGORY_LABELS).map(c => (
+                                                <button 
+                                                    key={c} type="button" onClick={() => setTempCategory(c)} 
+                                                    className={`py-3 rounded-xl text-[9px] font-black uppercase border-2 transition-all ${tempCategory === c ? CATEGORY_LABELS[c].color + ' border-transparent text-white shadow-md' : 'border-slate-100 text-slate-400'}`}
+                                                >
+                                                    {CATEGORY_LABELS[c].label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 text-center block">Tom Principal</label>
+                                        <div className="grid grid-cols-4 gap-1.5">
+                                            {HARMONIC_SCALE.map(note => (
+                                                <button key={note} onClick={() => setTempKey(note)} className={`py-3 rounded-lg font-black text-[10px] transition-all border ${tempKey === note ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-indigo-200'}`}>
+                                                    {note}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 mt-8 safe-pb">
+                                    <button onClick={() => setSelectedHymn(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 text-[10px] font-black uppercase rounded-xl">Cancelar</button>
+                                    <button onClick={handleSaveSettings} disabled={isSaving} className="flex-[2] py-4 bg-indigo-700 text-white text-[10px] font-black uppercase rounded-xl shadow-lg active:scale-95 transition-all">
+                                        {isSaving ? 'Salvando...' : 'Confirmar'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {modals.add && (
+                        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in">
+                            <form onSubmit={handleAddHymn} className="bg-white w-full max-w-lg rounded-t-[32px] sm:rounded-3xl p-6 shadow-2xl overflow-y-auto max-h-[92vh] custom-scrollbar">
+                                <h3 className="text-center text-[11px] font-black uppercase tracking-widest text-slate-400 mb-6">Novo Cadastro</h3>
+                                <div className="space-y-5">
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-2">Título *</label>
+                                        <input required className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3.5 px-4 font-bold text-sm" placeholder="Nome da música" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-2">Artista</label>
+                                        <input className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3.5 px-4 font-bold text-sm" placeholder="Ministério/Cantor" value={form.artist} onChange={e => setForm({...form, artist: e.target.value})} />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-2">Link YouTube</label>
+                                        <input className="w-full bg-slate-50 border border-slate-100 rounded-xl py-3.5 px-4 text-sm" placeholder="Opcional" value={form.youtubeUrl} onChange={e => setForm({...form, youtubeUrl: e.target.value})} />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-2">Categoria</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {Object.keys(CATEGORY_LABELS).map(c => (
+                                                <button type="button" key={c} onClick={() => setForm({...form, category: c})} className={`py-3 rounded-xl text-[8px] font-black uppercase border-2 transition-all ${form.category === c ? CATEGORY_LABELS[c].color + ' border-transparent text-white' : 'border-slate-100 text-slate-400'}`}>
+                                                    {CATEGORY_LABELS[c].label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-bold text-slate-400 uppercase ml-2 text-center block">Tom</label>
+                                        <div className="grid grid-cols-4 gap-1.5 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-100 custom-scrollbar">
+                                            {HARMONIC_SCALE.map(note => (
+                                                <button type="button" key={note} onClick={() => setForm({...form, key: note})} className={`py-2.5 rounded-lg font-black text-[10px] transition-all border ${form.key === note ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-100 text-slate-400'}`}>
+                                                    {note}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex gap-3 pt-6 safe-pb">
+                                    <button type="button" onClick={() => setModals({...modals, add: false})} className="flex-1 py-4 bg-slate-100 text-[10px] font-black uppercase rounded-xl">Sair</button>
+                                    <button type="submit" disabled={isSaving || !form.name} className="flex-[2] py-4 bg-indigo-700 text-white text-[10px] font-black uppercase rounded-xl shadow-lg active:scale-95 transition-all">
+                                        {isSaving ? 'Gravando...' : 'Confirmar'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+
+                    {modals.delete && (
+                        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-md animate-in">
+                            <div className="bg-white w-full max-w-xs rounded-3xl p-6 shadow-2xl text-center">
+                                <div className="w-14 h-14 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                    <Icon name="alert-triangle" className="w-7 h-7" />
+                                </div>
+                                <h3 className="font-black text-slate-800 uppercase text-xs mb-2">Eliminar?</h3>
+                                <p className="text-[10px] text-slate-400 mb-6 px-2 leading-relaxed uppercase font-semibold">
+                                    Remover "{modals.delete.displayName}" definitivamente?
+                                </p>
+                                <div className="flex flex-col gap-2">
+                                    <button onClick={executeDelete} disabled={isSaving} className="w-full py-3.5 bg-red-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg shadow-red-100">
+                                        Eliminar
+                                    </button>
+                                    <button onClick={() => setModals({...modals, delete: null})} className="w-full py-3 text-slate-400 text-[10px] font-black uppercase">Cancelar</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {modals.admin && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-xl animate-in">
+                            <div className="bg-white w-full max-w-xs rounded-3xl p-8 text-center shadow-2xl">
+                                <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                                    <Icon name="lock" className="w-7 h-7" />
+                                </div>
+                                <input type="password" placeholder="PIN" className="w-full bg-slate-100 rounded-xl py-4 text-center font-black text-2xl tracking-[0.5em] focus:ring-4 focus:ring-indigo-500/10 outline-none mb-6 border-none"
+                                    onChange={e => {
+                                        if (e.target.value === ADMIN_PIN) {
+                                            setIsAdmin(true);
+                                            setModals({...modals, admin: false});
+                                            showToast("Modo Admin Ativado");
+                                        }
+                                    }}
+                                />
+                                <button onClick={() => setModals({...modals, admin: false})} className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Sair</button>
+                            </div>
+                        </div>
+                    )}
+
+                    <footer className="fixed bottom-0 left-0 right-0 z-30 bg-white/80 backdrop-blur-lg border-t border-slate-200 safe-pb">
+                        <div className="max-w-2xl mx-auto px-6 py-4 flex flex-col items-center gap-3">
+                            <button 
+                                onClick={() => isAdmin ? setIsAdmin(false) : setModals({ ...modals, admin: true })} 
+                                className={`px-6 py-2.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] shadow-sm transition-all ${isAdmin ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-200'}`}
+                            >
+                                {isAdmin ? 'Sair do Admin' : 'Painel Gestão'}
+                            </button>
+                            <p className="text-[8px] font-black text-slate-300 uppercase tracking-[0.4em]">AD Perus - Almanara 2025</p>
+                        </div>
+                    </footer>
+
+                    {toast.show && (
+                        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[300] animate-in">
+                            <div className="bg-slate-900/95 backdrop-blur-md text-white px-6 py-3 rounded-2xl flex items-center gap-3 shadow-2xl border border-white/10">
+                                <Icon name="check-circle-2" className="text-emerald-400 w-4 h-4" />
+                                <span className="text-[9px] font-black uppercase tracking-widest">{toast.msg}</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
