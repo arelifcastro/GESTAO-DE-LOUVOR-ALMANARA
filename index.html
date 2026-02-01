@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -35,14 +35,8 @@
         .animate-in { animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         
-        .hymn-card {
-            transition: all 0.2s ease;
-        }
-        
-        .hymn-card:active {
-            transform: scale(0.98);
-            background-color: #f8fafc;
-        }
+        .hymn-card { transition: all 0.2s ease; }
+        .hymn-card:active { transform: scale(0.98); background-color: #f8fafc; }
 
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -51,20 +45,38 @@
         .safe-pb { padding-bottom: calc(1.5rem + var(--sab)); }
         .safe-pt { padding-top: calc(1rem + var(--sat)); }
         
-        textarea { font-size: 16px !important; }
+        textarea, input, select { font-size: 16px !important; }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+        }
+        .day-circle {
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9999px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .day-circle:active { transform: scale(0.9); }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
 
-    <!-- Script to load Firebase as modules and expose them to Babel script -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, serverTimestamp, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, serverTimestamp, query, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         window.FirebaseLib = {
-            initializeApp, getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, serverTimestamp, query,
+            initializeApp, getFirestore, collection, doc, setDoc, onSnapshot, addDoc, deleteDoc, serverTimestamp, query, updateDoc,
             getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken
         };
         
@@ -74,10 +86,90 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, memo } = React;
 
+        const CATEGORY_LABELS = {
+            jovens: { label: 'Jovens', color: 'bg-indigo-600', light: 'bg-indigo-50 text-indigo-600', border: 'border-indigo-100' },
+            adolescentes: { label: 'Adolescentes', color: 'bg-rose-500', light: 'bg-rose-50 text-rose-600', border: 'border-rose-100' },
+            integrado: { label: 'Integrado', color: 'bg-emerald-500', light: 'bg-emerald-50 text-emerald-600', border: 'border-emerald-100' }
+        };
+
+        const HARMONIC_SCALE = [
+            'C', 'Cm', 'C#', 'C#m', 'D', 'Dm', 'D#', 'D#m', 
+            'E', 'Em', 'F', 'Fm', 'F#', 'F#m', 'G', 'Gm', 
+            'G#', 'G#m', 'A', 'Am', 'A#', 'A#m', 'B', 'Bm'
+        ];
+
+        const ADMIN_PIN = "2025";
+
+        const STATIC_HYMNS = [
+            { id: 'j01', name: 'Aleluia, Salvação e Glória', artist: 'Hino', category: 'jovens' },
+            { id: 'j02', name: 'Alfa e Ômega', artist: 'Coral Resgate', category: 'jovens' },
+            { id: 'j03', name: 'Alfa e Ômega', artist: 'Marine Friesen', category: 'jovens' },
+            { id: 'j04', name: 'Ao Que Vencer', artist: 'Rejoicing', category: 'jovens' },
+            { id: 'j05', name: 'Autor da minha fé', artist: 'Grupo Elo', category: 'jovens' },
+            { id: 'j06', name: 'Bem Mais Que Tudo', artist: 'Aline Barros', category: 'jovens' },
+            { id: 'j07', name: 'Calvário', artist: 'Kades Singers', category: 'jovens' },
+            { id: 'j08', name: 'Cicatrizes', artist: 'Bruna Karla', category: 'jovens' },
+            { id: 'j09', name: 'Colossenses e suas lines de amor', artist: 'Fhop Music', category: 'jovens' },
+            { id: 'j10', name: 'Coração Valente', artist: 'Anderson Freire', category: 'jovens' },
+            { id: 'j11', name: 'Deus Pode', artist: 'Jéssica Augusto', category: 'jovens' },
+            { id: 'j14', name: 'Ele Vem', artist: 'Kemuel', category: 'jovens' },
+            { id: 'j15', name: 'Eu Me Alegro em Ti', artist: 'IBAB', category: 'jovens' },
+            { id: 'j20', name: 'Há Um Lugar', artist: 'Renascer Praise', category: 'jovens' },
+            { id: 'j23', name: 'João Viu / Só Tu És Santo', artist: 'Pedro Henrique', category: 'jovens' },
+            { id: 'j26', name: 'Louve e Adore', artist: 'Michelle Nascimento', category: 'jovens' },
+            { id: 'j30', name: 'Na Tua Presença', artist: 'Renascer Praise', category: 'jovens' },
+            { id: 'j35', name: 'O lamento de Israel', artist: 'Sergio Lopes', category: 'jovens' },
+            { id: 'j42', name: 'Quem é esse', artist: 'Julliany Souza', category: 'jovens' },
+            { id: 'j43', name: 'Redentor', artist: 'Coral Resgate', category: 'jovens' },
+            { id: 'j47', name: 'Santo', artist: 'Ekklesia', category: 'jovens' },
+            { id: 'j49', name: 'Sentimento Novo', artist: 'Renascer Praise', category: 'jovens' },
+            { id: 'j53', name: 'Teu Amor', artist: 'Voice Soul', category: 'jovens' },
+            { id: 'j58', name: 'Vem Espírito', artist: 'Renascer Praise', category: 'jovens' },
+            { id: 'j60', name: 'Yahweh', artist: 'One Service', category: 'jovens' },
+            { id: 'a01', name: 'A Ele a Glória', artist: 'Nani Azevedo', category: 'adolescentes' },
+            { id: 'a02', name: 'Aclame ao Senhor', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a03', name: 'Aguardo o Dia', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a04', name: 'Amor Tão Lindo', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a05', name: 'Atos 2', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a06', name: 'Coração Valente', artist: 'Anderson Freire', category: 'adolescentes' },
+            { id: 'a07', name: 'Como Flecha', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a08', name: 'Como Maria', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a09', name: 'Creio que Tu És a Cura', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a10', name: 'Deserto', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a11', name: 'Deus Me Ama', artist: 'Thalles Roberto', category: 'adolescentes' },
+            { id: 'a12', name: 'Esconda-me em Ti', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a13', name: 'És Adorado', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a14', name: 'Eu Não Vou Me Apegar', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a15', name: 'Eu Tenho um Chamado', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a16', name: 'Faz Chover', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a17', name: 'Juventude', artist: 'Anderson Freire', category: 'adolescentes' },
+            { id: 'a18', name: 'Leão e o Cordeiro', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a19', name: 'Lugar Secreto', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a20', name: 'Maranata', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a21', name: 'Minha Herança', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a22', name: 'Mistério / Sarando a Terra / Ora Vem', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a23', name: 'Na Força do Louvor', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a24', name: 'Na Unção de Deus / Mostra-me Sua Glória', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a25', name: 'Nada Além do Sangue', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a26', name: 'Pai Nosso', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a27', name: 'Primeira Essência', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a28', name: 'Rendido Estou', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a29', name: 'Ruja o Leão', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a30', name: 'Santuário', artist: 'Aline Barros', category: 'adolescentes' },
+            { id: 'a31', name: 'Só Tu És Santo / Outro Igual Não Há', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a32', name: 'Tens Liberdade Aqui', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a33', name: 'Toda Terra', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a34', name: 'Vem Me Buscar', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a35', name: 'Voz do que Clama', artist: 'Desconhecido', category: 'adolescentes' },
+            { id: 'a36', name: 'A Igreja Vem', artist: 'Anderson Freire', category: 'adolescentes' },
+            { id: 'a37', name: 'Até que o Senhor Venha', artist: 'Desconhecido', category: 'adolescentes' }
+        ];
+
         function App() {
             const [fbReady, setFbReady] = useState(!!window.FirebaseLib);
             const [user, setUser] = useState(null);
             const [isAdmin, setIsAdmin] = useState(false);
+            const [activeView, setActiveView] = useState('repertorio'); 
             const [activeTab, setActiveTab] = useState('jovens');
             const [searchTerm, setSearchTerm] = useState('');
             const [selectedHymn, setSelectedHymn] = useState(null);
@@ -85,118 +177,23 @@
             const [hymnSettings, setHymnSettings] = useState({});
             const [customHymns, setCustomHymns] = useState([]);
             const [hiddenHymns, setHiddenHymns] = useState({});
+            const [agendaData, setAgendaData] = useState({}); 
+            const [regentes, setRegentes] = useState([]);
+            const [selectedDate, setSelectedDate] = useState(null);
+            const [isPickingHymns, setIsPickingHymns] = useState(false);
             
-            const [tempData, setTempData] = useState({ name: '', artist: '', key: '', youtube: '', category: '' });
+            const [tempData, setTempData] = useState({ name: '', artist: '', key: '', youtube: '', category: 'jovens' });
             const [form, setForm] = useState({ name: '', artist: '', category: 'jovens', youtubeUrl: '', key: '' });
             const [bulkForm, setBulkForm] = useState({ text: '', category: 'jovens' });
+            const [regenteForm, setRegenteForm] = useState({ name: '', category: 'jovens' });
 
             const [loading, setLoading] = useState(true);
             const [isSaving, setIsSaving] = useState(false);
             const [toast, setToast] = useState({ show: false, msg: '' });
-            const [modals, setModals] = useState({ add: false, admin: false, delete: null, bulk: false });
+            const [modals, setModals] = useState({ add: false, admin: false, delete: null, bulk: false, dayDetail: false, regentes: false });
 
-            const firebaseConfig = {
-                apiKey: "AIzaSyD7VpO1AlbVwN60N1TPn0QepcBi6F5CgRg",
-                authDomain: "gestaodelouvoralmanara.firebaseapp.com",
-                projectId: "gestaodelouvoralmanara",
-                storageBucket: "gestaodelouvoralmanara.firebasestorage.app",
-                messagingSenderId: "967352802208",
-                appId: "1:967352802208:web:9077952f70efba96da62c5",
-                measurementId: "G-C01MQW10K5"
-            };
-
-            const services = useRef({ auth: null, db: null });
             const appId = typeof __app_id !== 'undefined' ? __app_id : 'louvor-almanara-2025';
-
-            const STATIC_HYMNS = [
-                // JOVENS
-                { id: 'j01', name: 'Aleluia, Salvação e Glória', artist: 'Hino', category: 'jovens' },
-                { id: 'j02', name: 'Alfa e Ômega', artist: 'Coral Resgate', category: 'jovens' },
-                { id: 'j03', name: 'Alfa e Ômega', artist: 'Marine Friesen', category: 'jovens' },
-                { id: 'j04', name: 'Ao Que Vencer', artist: 'Rejoicing', category: 'jovens' },
-                { id: 'j05', name: 'Autor da minha fé', artist: 'Grupo Elo', category: 'jovens' },
-                { id: 'j06', name: 'Bem Mais Que Tudo', artist: 'Aline Barros', category: 'jovens' },
-                { id: 'j07', name: 'Calvário', artist: 'Kades Singers', category: 'jovens' },
-                { id: 'j08', name: 'Cicatrizes', artist: 'Bruna Karla', category: 'jovens' },
-                { id: 'j09', name: 'Colossenses e suas lines de amor', artist: 'Fhop Music', category: 'jovens' },
-                { id: 'j10', name: 'Coração Valente', artist: 'Anderson Freire', category: 'jovens' },
-                { id: 'j11', name: 'Deus Pode', artist: 'Jéssica Augusto', category: 'jovens' },
-                { id: 'j14', name: 'Ele Vem', artist: 'Kemuel', category: 'jovens' },
-                { id: 'j15', name: 'Eu Me Alegro em Ti', artist: 'IBAB', category: 'jovens' },
-                { id: 'j20', name: 'Há Um Lugar', artist: 'Renascer Praise', category: 'jovens' },
-                { id: 'j23', name: 'João Viu / Só Tu És Santo', artist: 'Pedro Henrique', category: 'jovens' },
-                { id: 'j26', name: 'Louve e Adore', artist: 'Michelle Nascimento', category: 'jovens' },
-                { id: 'j30', name: 'Na Tua Presença', artist: 'Renascer Praise', category: 'jovens' },
-                { id: 'j35', name: 'O lamento de Israel', artist: 'Sergio Lopes', category: 'jovens' },
-                { id: 'j42', name: 'Quem é esse', artist: 'Julliany Souza', category: 'jovens' },
-                { id: 'j43', name: 'Redentor', artist: 'Coral Resgate', category: 'jovens' },
-                { id: 'j47', name: 'Santo', artist: 'Ekklesia', category: 'jovens' },
-                { id: 'j49', name: 'Sentimento Novo', artist: 'Renascer Praise', category: 'jovens' },
-                { id: 'j53', name: 'Teu Amor', artist: 'Voice Soul', category: 'jovens' },
-                { id: 'j58', name: 'Vem Espírito', artist: 'Renascer Praise', category: 'jovens' },
-                { id: 'j60', name: 'Yahweh', artist: 'One Service', category: 'jovens' },
-
-                // ADOLESCENTES
-                { id: 'a01', name: 'A Ele a Glória', artist: 'Nani Azevedo', category: 'adolescentes' },
-                { id: 'a02', name: 'Aclame ao Senhor', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a03', name: 'Aguardo o Dia', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a04', name: 'Amor Tão Lindo', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a05', name: 'Atos 2', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a06', name: 'Coração Valente', artist: 'Anderson Freire', category: 'adolescentes' },
-                { id: 'a07', name: 'Como Flecha', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a08', name: 'Como Maria', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a09', name: 'Creio que Tu És a Cura', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a10', name: 'Deserto', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a11', name: 'Deus Me Ama', artist: 'Thalles Roberto', category: 'adolescentes' },
-                { id: 'a12', name: 'Esconda-me em Ti', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a13', name: 'És Adorado', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a14', name: 'Eu Não Vou Me Apegar', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a15', name: 'Eu Tenho um Chamado', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a16', name: 'Faz Chover', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a17', name: 'Juventude', artist: 'Anderson Freire', category: 'adolescentes' },
-                { id: 'a18', name: 'Leão e o Cordeiro', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a19', name: 'Lugar Secreto', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a20', name: 'Maranata', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a21', name: 'Minha Herança', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a22', name: 'Mistério / Sarando a Terra / Ora Vem', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a23', name: 'Na Força do Louvor', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a24', name: 'Na Unção de Deus / Mostra-me Sua Glória', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a25', name: 'Nada Além do Sangue', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a26', name: 'Pai Nosso', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a27', name: 'Primeira Essência', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a28', name: 'Rendido Estou', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a29', name: 'Ruja o Leão', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a30', name: 'Santuário', artist: 'Aline Barros', category: 'adolescentes' },
-                { id: 'a31', name: 'Só Tu És Santo / Outro Igual Não Há', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a32', name: 'Tens Liberdade Aqui', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a33', name: 'Toda Terra', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a34', name: 'Vem Me Buscar', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a35', name: 'Voz do que Clama', artist: 'Desconhecido', category: 'adolescentes' },
-                { id: 'a36', name: 'A Igreja Vem', artist: 'Anderson Freire', category: 'adolescentes' },
-                { id: 'a37', name: 'Até que o Senhor Venha', artist: 'Desconhecido', category: 'adolescentes' }
-            ];
-
-            const HARMONIC_SCALE = [
-                'C', 'Cm', 'C#', 'C#m', 'D', 'Dm', 'D#', 'D#m', 
-                'E', 'Em', 'F', 'Fm', 'F#', 'F#m', 'G', 'Gm', 
-                'G#', 'G#m', 'A', 'Am', 'A#', 'A#m', 'B', 'Bm'
-            ];
-
-            const CATEGORY_LABELS = {
-                jovens: { label: 'Jovens', color: 'bg-indigo-600', light: 'bg-indigo-50 text-indigo-600' },
-                adolescentes: { label: 'Adolescentes', color: 'bg-rose-500', light: 'bg-rose-50 text-rose-600' },
-                integrado: { label: 'Integrado', color: 'bg-emerald-500', light: 'bg-emerald-50 text-emerald-600' }
-            };
-
-            const ADMIN_PIN = "2025";
-
-            const getYoutubeThumbnail = (url) => {
-                if (!url) return null;
-                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-                const match = url.match(regExp);
-                const id = (match && match[2].length === 11) ? match[2] : null;
-                return id ? `https://img.youtube.com/vi/${id}/mqdefault.jpg` : null;
-            };
+            const services = useRef({ auth: null, db: null });
 
             useEffect(() => {
                 const handleReady = () => setFbReady(true);
@@ -206,83 +203,45 @@
 
             useEffect(() => {
                 if (!fbReady) return;
-                const { initializeApp, getFirestore, getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } = window.FirebaseLib;
-                
-                const app = initializeApp(firebaseConfig);
+                const { initializeApp, getFirestore, getAuth, signInAnonymously, onAuthStateChanged } = window.FirebaseLib;
+                const app = initializeApp({
+                    apiKey: "AIzaSyD7VpO1AlbVwN60N1TPn0QepcBi6F5CgRg",
+                    authDomain: "gestaodelouvoralmanara.firebaseapp.com",
+                    projectId: "gestaodelouvoralmanara",
+                    storageBucket: "gestaodelouvoralmanara.firebasestorage.app",
+                    messagingSenderId: "967352802208",
+                    appId: "1:967352802208:web:9077952f70efba96da62c5"
+                });
                 services.current.auth = getAuth(app);
                 services.current.db = getFirestore(app);
-
-                const initAuth = async () => {
-                    try {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await signInWithCustomToken(services.current.auth, __initial_auth_token).catch(() => signInAnonymously(services.current.auth));
-                        } else { 
-                            await signInAnonymously(services.current.auth); 
-                        }
-                    } catch (err) { console.error("Auth Error:", err); }
-                };
-                
-                initAuth();
-                const unsubscribe = onAuthStateChanged(services.current.auth, (u) => { 
-                    setUser(u); 
-                    if (u) setLoading(false);
-                });
-                return () => unsubscribe();
+                signInAnonymously(services.current.auth).catch(e => console.error(e));
+                return onAuthStateChanged(services.current.auth, (u) => { setUser(u); if (u) setLoading(false); });
             }, [fbReady]);
 
             useEffect(() => {
                 if (!user || !fbReady) return;
                 const { collection, onSnapshot } = window.FirebaseLib;
                 const base = ['artifacts', appId, 'public', 'data'];
-                
-                const unsubSettings = onSnapshot(collection(services.current.db, ...base, 'hymnSettings'), (snap) => {
-                    const data = {}; snap.forEach(d => data[d.id] = d.data());
-                    setHymnSettings(data);
-                }, (err) => console.error("Settings Sync Error:", err));
-
-                const unsubCustom = onSnapshot(collection(services.current.db, ...base, 'customHymns'), (snap) => {
-                    const list = []; snap.forEach(d => list.push({ id: d.id, ...d.data() }));
-                    setCustomHymns(list);
-                });
-
-                const unsubHidden = onSnapshot(collection(services.current.db, ...base, 'hiddenHymns'), (snap) => {
-                    const data = {}; snap.forEach(d => data[d.id] = true);
-                    setHiddenHymns(data);
-                });
-
-                return () => { unsubSettings(); unsubCustom(); unsubHidden(); };
+                onSnapshot(collection(services.current.db, ...base, 'hymnSettings'), (s) => { const d = {}; s.forEach(doc => d[doc.id] = doc.data()); setHymnSettings(d); });
+                onSnapshot(collection(services.current.db, ...base, 'customHymns'), (s) => { const l = []; s.forEach(doc => l.push({ id: doc.id, ...doc.data() })); setCustomHymns(l); });
+                onSnapshot(collection(services.current.db, ...base, 'hiddenHymns'), (s) => { const d = {}; s.forEach(doc => d[doc.id] = true); setHiddenHymns(d); });
+                onSnapshot(collection(services.current.db, ...base, 'agenda'), (s) => { const d = {}; s.forEach(doc => d[doc.id] = doc.data()); setAgendaData(d); });
+                onSnapshot(collection(services.current.db, ...base, 'regentes'), (s) => { const l = []; s.forEach(doc => l.push({ id: doc.id, ...doc.data() })); setRegentes(l); });
             }, [user, fbReady]);
 
-            const allHymns = useMemo(() => {
-                return [...STATIC_HYMNS, ...customHymns].filter(h => !hiddenHymns[h.id]);
-            }, [customHymns, hiddenHymns]);
-
+            const allHymns = useMemo(() => [...STATIC_HYMNS, ...customHymns].filter(h => !hiddenHymns[h.id]), [customHymns, hiddenHymns]);
+            
             const filteredList = useMemo(() => {
                 const q = searchTerm.toLowerCase().trim();
                 const list = allHymns.map(h => {
                     const s = hymnSettings[h.id];
-                    return {
-                        ...h,
-                        displayName: s?.name || h.name,
-                        displayArtist: s?.artist || h.artist,
-                        displayCategory: s?.category || h.category,
-                        key: s?.key || ''
-                    };
+                    return { ...h, displayName: s?.name || h.name, displayArtist: s?.artist || h.artist, displayCategory: s?.category || h.category || 'jovens', key: s?.key || '' };
                 });
-                
-                if (q) {
-                    return list.filter(h => 
-                        h.displayName.toLowerCase().includes(q) || 
-                        h.displayArtist.toLowerCase().includes(q)
-                    );
-                }
+                if (q) return list.filter(h => (h.displayName || '').toLowerCase().includes(q) || (h.displayArtist || '').toLowerCase().includes(q));
                 return list.filter(h => h.displayCategory === activeTab);
             }, [searchTerm, activeTab, allHymns, hymnSettings]);
 
-            const showToast = (msg) => {
-                setToast({ show: true, msg });
-                setTimeout(() => setToast({ show: false, msg: '' }), 3000);
-            };
+            const showToast = (msg) => { setToast({ show: true, msg }); setTimeout(() => setToast({ show: false, msg: '' }), 3000); };
 
             const handleSaveSettings = async () => {
                 if (!user || !selectedHymn) return;
@@ -290,15 +249,10 @@
                 setIsSaving(true);
                 try {
                     const docRef = doc(services.current.db, 'artifacts', appId, 'public', 'data', 'hymnSettings', selectedHymn.id);
-                    await setDoc(docRef, { 
-                        name: tempData.name, artist: tempData.artist, key: tempData.key, 
-                        youtubeUrl: tempData.youtube, category: tempData.category,
-                        updatedAt: serverTimestamp() 
-                    }, { merge: true });
+                    await setDoc(docRef, { ...tempData, updatedAt: serverTimestamp() }, { merge: true });
                     showToast("Louvor atualizado!");
                     setSelectedHymn(null);
-                } catch (e) { showToast("Erro ao salvar."); }
-                finally { setIsSaving(false); }
+                } catch (e) { showToast("Erro ao guardar."); } finally { setIsSaving(false); }
             };
 
             const handleAddHymn = async (e) => {
@@ -308,23 +262,13 @@
                 setIsSaving(true);
                 try {
                     const colRef = collection(services.current.db, 'artifacts', appId, 'public', 'data', 'customHymns');
-                    const docRef = await addDoc(colRef, {
-                        name: form.name, artist: form.artist || 'Desconhecido',
-                        category: form.category, createdAt: serverTimestamp()
-                    });
-                    
-                    if (form.key || form.youtubeUrl) {
-                        const settingsRef = doc(services.current.db, 'artifacts', appId, 'public', 'data', 'hymnSettings', docRef.id);
-                        await setDoc(settingsRef, {
-                            key: form.key, youtubeUrl: form.youtubeUrl,
-                            category: form.category, updatedAt: serverTimestamp()
-                        });
-                    }
-                    showToast("Novo louvor adicionado!");
+                    const docRef = await addDoc(colRef, { name: form.name, artist: form.artist || 'Desconhecido', category: form.category || 'jovens', createdAt: serverTimestamp() });
+                    const settingsRef = doc(services.current.db, 'artifacts', appId, 'public', 'data', 'hymnSettings', docRef.id);
+                    await setDoc(settingsRef, { key: form.key || '', youtubeUrl: form.youtubeUrl || '', category: form.category || 'jovens', updatedAt: serverTimestamp() }, { merge: true });
+                    showToast("Hino adicionado!");
                     setForm({ name: '', artist: '', category: 'jovens', youtubeUrl: '', key: '' });
                     setModals({ ...modals, add: false });
-                } catch (e) { showToast("Erro ao criar."); }
-                finally { setIsSaving(false); }
+                } catch (e) { showToast("Erro ao guardar."); } finally { setIsSaving(false); }
             };
 
             const handleBulkAdd = async (e) => {
@@ -332,73 +276,123 @@
                 if (!user || !bulkForm.text.trim()) return;
                 const { collection, addDoc, serverTimestamp } = window.FirebaseLib;
                 setIsSaving(true);
-                
                 const lines = bulkForm.text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-                let count = 0;
-
                 try {
                     const colRef = collection(services.current.db, 'artifacts', appId, 'public', 'data', 'customHymns');
-                    
-                    for (const name of lines) {
-                        await addDoc(colRef, {
-                            name: name,
-                            artist: 'Desconhecido',
-                            category: bulkForm.category,
-                            createdAt: serverTimestamp()
-                        });
-                        count++;
-                    }
-                    
-                    showToast(`${count} hinos importados!`);
+                    for (const name of lines) { await addDoc(colRef, { name, artist: 'Desconhecido', category: bulkForm.category || 'jovens', createdAt: serverTimestamp() }); }
+                    showToast(`${lines.length} hinos importados!`);
                     setBulkForm({ text: '', category: 'jovens' });
                     setModals({ ...modals, bulk: false });
-                } catch (e) {
-                    showToast("Erro na importação.");
-                    console.error(e);
-                } finally {
-                    setIsSaving(false);
-                }
+                } catch (e) { showToast("Erro na importação."); } finally { setIsSaving(false); }
             };
 
-            const executeDelete = async () => {
-                if (!modals.delete || !isAdmin) return;
-                const { doc, setDoc, deleteDoc } = window.FirebaseLib;
+            const handleAddRegente = async (e) => {
+                e.preventDefault();
+                if (!user || !regenteForm.name) return;
+                const { collection, addDoc, serverTimestamp } = window.FirebaseLib;
                 setIsSaving(true);
                 try {
-                    const hymn = modals.delete;
+                    const colRef = collection(services.current.db, 'artifacts', appId, 'public', 'data', 'regentes');
+                    await addDoc(colRef, { name: regenteForm.name, category: regenteForm.category, createdAt: serverTimestamp() });
+                    showToast("Regente registada!");
+                    setRegenteForm({ name: '', category: 'jovens' });
+                } catch (e) { showToast("Erro ao registar."); } finally { setIsSaving(false); }
+            };
+
+            const handleDeleteRegente = async (id) => {
+                if (!isAdmin) return;
+                const { doc, deleteDoc } = window.FirebaseLib;
+                try { await deleteDoc(doc(services.current.db, 'artifacts', appId, 'public', 'data', 'regentes', id)); showToast("Removida."); } catch (e) { showToast("Erro."); }
+            };
+
+            const handleDeleteCustomHymn = async (hymn) => {
+                if (!isAdmin) return;
+                const { doc, deleteDoc, setDoc } = window.FirebaseLib;
+                try {
                     const isStatic = STATIC_HYMNS.some(h => h.id === hymn.id);
-                    if (isStatic) { 
-                        await setDoc(doc(services.current.db, 'artifacts', appId, 'public', 'data', 'hiddenHymns', hymn.id), { hidden: true }); 
-                    } else { 
-                        await deleteDoc(doc(services.current.db, 'artifacts', appId, 'public', 'data', 'customHymns', hymn.id)); 
-                    }
-                    showToast("Removido do repertório.");
-                    setModals({ ...modals, delete: null });
+                    if (isStatic) await setDoc(doc(services.current.db, 'artifacts', appId, 'public', 'data', 'hiddenHymns', hymn.id), { hidden: true }); 
+                    else await deleteDoc(doc(services.current.db, 'artifacts', appId, 'public', 'data', 'customHymns', hymn.id));
+                    showToast("Removido.");
                 } catch (e) { showToast("Erro ao remover."); }
-                finally { setIsSaving(false); }
             };
 
-            const openEdit = (hymn) => {
-                const s = hymnSettings[hymn.id];
-                setSelectedHymn(hymn);
-                setTempData({
-                    name: hymn.displayName,
-                    artist: hymn.displayArtist,
-                    key: s?.key || '',
-                    youtube: s?.youtubeUrl || '',
-                    category: hymn.displayCategory
-                });
+            const toggleAgendaHymn = async (hymn) => {
+                if (!selectedDate) return;
+                const { doc, setDoc } = window.FirebaseLib;
+                const currentList = agendaData[selectedDate]?.hymns || [];
+                const isSelected = currentList.some(h => h.id === hymn.id);
+                const newList = isSelected ? currentList.filter(h => h.id !== hymn.id) : [...currentList, { id: hymn.id, name: hymn.displayName || hymn.name, artist: hymn.displayArtist || hymn.artist, category: hymn.displayCategory || hymn.category || 'jovens' }];
+                try { await setDoc(doc(services.current.db, 'artifacts', appId, 'public', 'data', 'agenda', selectedDate), { hymns: newList }, { merge: true }); } catch (e) { showToast("Erro."); }
             };
 
-            if (loading) return (
-                <div className="flex flex-col items-center justify-center min-h-screen bg-indigo-900 text-white p-8 overflow-hidden">
-                    <div className="relative mb-6">
-                        <div className="absolute inset-0 bg-white/20 blur-2xl rounded-full animate-pulse"></div>
-                        <Icon name="music" className="w-16 h-16 relative z-10 opacity-80" />
+            const setRegenteForAgenda = async (cat, regenteObj) => {
+                if (!selectedDate) return;
+                const { doc, setDoc } = window.FirebaseLib;
+                try {
+                    const docRef = doc(services.current.db, 'artifacts', appId, 'public', 'data', 'agenda', selectedDate);
+                    const update = cat === 'jovens' ? { regenteJovens: regenteObj } : { regenteAdol: regenteObj };
+                    await setDoc(docRef, update, { merge: true });
+                } catch (e) { showToast("Erro."); }
+            };
+
+            const renderHymnCard = (hymn, onClick = null, isAgendaView = false) => {
+                const settings = hymnSettings[hymn.id];
+                const thumb = getYoutubeThumbnail(settings?.youtubeUrl);
+                const catKey = hymn.category || hymn.displayCategory;
+                const cat = CATEGORY_LABELS[catKey] || CATEGORY_LABELS.jovens;
+                const key = settings?.key || hymn.key;
+
+                return (
+                    <div key={hymn.id} onClick={onClick} className="hymn-card bg-white p-3 rounded-[24px] border border-slate-200/60 shadow-sm flex items-center gap-4 animate-in cursor-pointer">
+                        <div className="w-16 h-16 rounded-2xl bg-slate-100 flex-shrink-0 overflow-hidden flex items-center justify-center border border-slate-100">
+                            {thumb ? <img src={thumb} className="w-full h-full object-cover" /> : <Icon name="music" className="w-6 h-6 text-slate-300" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <h3 className="text-sm font-bold text-slate-800 uppercase truncate mb-1">{hymn.displayName || hymn.name}</h3>
+                            <div className="flex items-center gap-2">
+                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase shrink-0 ${cat.light}`}>{cat.label}</span>
+                                <p className="text-[11px] font-medium text-slate-400 italic truncate">{hymn.displayArtist || hymn.artist}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {key && <div className="min-w-[40px] h-10 px-2 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100 font-extrabold text-[12px]">{key}</div>}
+                            {isAdmin && (
+                                <button 
+                                    onClick={(e) => { 
+                                        e.stopPropagation(); 
+                                        if(isAgendaView) toggleAgendaHymn(hymn);
+                                        else handleDeleteCustomHymn(hymn);
+                                    }} 
+                                    className="p-2 text-slate-200 hover:text-rose-500 transition-colors"
+                                >
+                                    <Icon name="trash-2" className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
                     </div>
-                    <p className="font-bold tracking-widest text-[10px] uppercase opacity-40">Sincronizando Repertório...</p>
-                </div>
-            );
+                );
+            };
+
+            const getYoutubeThumbnail = (url) => {
+                if (!url) return null;
+                const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
+                return (match && match[2].length === 11) ? `https://img.youtube.com/vi/${match[2]}/mqdefault.jpg` : null;
+            };
+
+            const [currentMonth, setCurrentMonth] = useState(new Date());
+            const calendarDays = useMemo(() => {
+                const y = currentMonth.getFullYear(); const m = currentMonth.getMonth();
+                const days = []; const offset = new Date(y, m, 1).getDay(); const total = new Date(y, m + 1, 0).getDate();
+                for (let i = 0; i < offset; i++) days.push(null);
+                for (let i = 1; i <= total; i++) days.push(i);
+                return days;
+            }, [currentMonth]);
+
+            const nextEvents = useMemo(() => {
+                return Object.entries(agendaData)
+                    .filter(([date, data]) => new Date(date) >= new Date().setHours(0,0,0,0) && (data.hymns?.length > 0 || data.regenteJovens || data.regenteAdol))
+                    .sort(([a], [b]) => a.localeCompare(b));
+            }, [agendaData]);
 
             return (
                 <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
@@ -406,367 +400,285 @@
                         <div className="max-w-2xl mx-auto px-5 safe-pt pb-5">
                             <div className="flex items-center justify-between mb-5">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/20 shadow-inner">
-                                        <Icon name="library" className="w-5 h-5" />
-                                    </div>
-                                    <div>
-                                        <h1 className="text-lg font-extrabold tracking-tight leading-none">ALMANARA</h1>
-                                        <p className="text-[9px] font-bold text-indigo-200 uppercase tracking-[0.2em] mt-1">Gestão de Louvor v2.5</p>
-                                    </div>
+                                    <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/20"><Icon name="library" className="w-5 h-5" /></div>
+                                    <h1 className="text-lg font-extrabold tracking-tight">ALMANARA</h1>
                                 </div>
-                                <button 
-                                    onClick={() => isAdmin ? setIsAdmin(false) : setModals({ ...modals, admin: true })}
-                                    className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${isAdmin ? 'bg-amber-400 text-amber-950 shadow-lg shadow-amber-400/20' : 'bg-white/10 text-white/80'}`}
-                                >
-                                    <Icon name={isAdmin ? "unlock" : "lock"} className="w-3 h-3" />
-                                    {isAdmin ? 'ADM' : 'Restrito'}
-                                </button>
-                            </div>
-                            
-                            <div className="flex gap-3">
-                                <div className="relative flex-1 group">
-                                    <Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 group-focus-within:text-white transition-colors" />
-                                    <input 
-                                        type="text" 
-                                        placeholder="Título ou Cantor..."
-                                        className="w-full bg-indigo-800/40 border-none rounded-2xl py-3 pl-11 pr-4 text-sm font-semibold placeholder-white/30 focus:ring-4 focus:ring-white/10 transition-all outline-none"
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                    />
-                                </div>
-                                <div className="flex gap-2">
-                                    <button 
-                                        onClick={() => setModals({ ...modals, bulk: true })} 
-                                        title="Importar Lista"
-                                        className="bg-indigo-600/30 text-white border border-white/20 w-12 h-12 rounded-2xl active:scale-90 transition-all flex items-center justify-center shrink-0"
-                                    >
-                                        <Icon name="list-plus" className="w-5 h-5" />
-                                    </button>
-                                    <button 
-                                        onClick={() => setModals({ ...modals, add: true })} 
-                                        className="bg-white text-indigo-700 w-12 h-12 rounded-2xl shadow-xl shadow-indigo-900/20 active:scale-90 transition-all flex items-center justify-center shrink-0"
-                                    >
-                                        <Icon name="plus" className="w-6 h-6" />
+                                <div className="flex items-center gap-2">
+                                    {isAdmin && (
+                                        <button onClick={() => setModals({...modals, regentes: true})} className="bg-white/10 text-white p-2 rounded-xl border border-white/10 active:scale-95"><Icon name="users" className="w-4 h-4" /></button>
+                                    )}
+                                    <button onClick={() => isAdmin ? setIsAdmin(false) : setModals({ ...modals, admin: true })} className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider transition-all ${isAdmin ? 'bg-amber-400 text-amber-950 shadow-lg' : 'bg-white/10 text-white/80'}`}>
+                                        {isAdmin ? 'ADM ON' : 'RESTREITO'}
                                     </button>
                                 </div>
                             </div>
+                            <div className="flex gap-2 p-1 bg-indigo-900/40 rounded-2xl border border-white/10 mb-5">
+                                <button onClick={() => setActiveView('repertorio')} className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'repertorio' ? 'bg-white text-indigo-700 shadow-md' : 'text-white/60'}`}>Repertório</button>
+                                <button onClick={() => { setActiveView('agenda'); setSelectedDate(null); }} className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeView === 'agenda' ? 'bg-white text-indigo-700 shadow-md' : 'text-white/60'}`}>Agenda</button>
+                            </div>
+                            {activeView === 'repertorio' && (
+                                <div className="flex gap-3 animate-in">
+                                    <div className="relative flex-1 group"><Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 group-focus-within:text-white transition-colors" /><input type="text" placeholder="Procurar hino..." className="w-full bg-indigo-800/40 border-none rounded-2xl py-3 pl-11 pr-4 text-sm font-semibold placeholder-white/30 focus:ring-4 focus:ring-white/10 transition-all outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setModals({ ...modals, bulk: true })} title="Importar Lista" className="bg-indigo-600/30 text-white border border-white/20 w-12 h-12 rounded-2xl active:scale-90 transition-all flex items-center justify-center shrink-0"><Icon name="list-plus" className="w-5 h-5" /></button>
+                                        <button onClick={() => setModals({ ...modals, add: true })} className="bg-white text-indigo-700 w-12 h-12 rounded-2xl shadow-xl shadow-indigo-900/20 active:scale-90 transition-all flex items-center justify-center shrink-0"><Icon name="plus" className="w-6 h-6" /></button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </header>
 
-                    {!searchTerm && (
-                        <nav className="max-w-2xl w-full mx-auto px-5 mt-5">
-                            <div className="flex p-1.5 bg-slate-200/50 rounded-2xl gap-1 border border-slate-200/50">
-                                {Object.keys(CATEGORY_LABELS).map((cat) => (
-                                    <button
-                                        key={cat}
-                                        onClick={() => setActiveTab(cat)}
-                                        className={`flex-1 py-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-widest transition-all flex items-center justify-center ${activeTab === cat ? 'bg-white text-indigo-700 shadow-md translate-y-[-1px]' : 'text-slate-500 hover:bg-white/40'}`}
-                                    >
-                                        {CATEGORY_LABELS[cat].label}
-                                    </button>
-                                ))}
-                            </div>
-                        </nav>
-                    )}
+                    {activeView === 'repertorio' ? (
+                        <>
+                            <nav className="max-w-2xl w-full mx-auto px-5 mt-5">
+                                <div className="flex p-1.5 bg-slate-200/50 rounded-2xl gap-1 border border-slate-200/50">
+                                    {Object.keys(CATEGORY_LABELS).map((cat) => (<button key={cat} onClick={() => setActiveTab(cat)} className={`flex-1 py-3.5 rounded-xl text-[10px] font-extrabold uppercase tracking-widest transition-all flex items-center justify-center ${activeTab === cat ? 'bg-white text-indigo-700 shadow-md translate-y-[-1px]' : 'text-slate-500 hover:bg-white/40'}`}>{CATEGORY_LABELS[cat].label}</button>))}
+                                </div>
+                            </nav>
+                            <main className="max-w-2xl w-full mx-auto px-5 mt-6 space-y-3 pb-40">
+                                {filteredList.map((hymn) => renderHymnCard(hymn, () => { 
+                                    const settings = hymnSettings[hymn.id]; 
+                                    setSelectedHymn(hymn); 
+                                    setTempData({ name: hymn.displayName, artist: hymn.displayArtist, key: settings?.key || '', youtube: settings?.youtubeUrl || '', category: hymn.displayCategory }); 
+                                }))}
+                            </main>
+                        </>
+                    ) : (
+                        <main className="max-w-2xl w-full mx-auto px-5 mt-8 animate-in pb-40">
+                            <div className="bg-white rounded-[32px] p-6 shadow-xl border border-slate-200/60 mb-8">
+                                <div className="flex items-center justify-between mb-8">
+                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="p-2 text-indigo-600"><Icon name="chevron-left" className="w-6 h-6" /></button>
+                                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{currentMonth.toLocaleString('pt-pt', { month: 'long', year: 'numeric' })}</h3>
+                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="p-2 text-indigo-600"><Icon name="chevron-right" className="w-6 h-6" /></button>
+                                </div>
+                                <div className="calendar-grid mb-4">
+                                    {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(d => <div key={d} className="text-center text-[10px] font-black text-slate-300 uppercase py-2">{d}</div>)}
+                                    {calendarDays.map((day, i) => {
+                                        if (!day) return <div key={`empty-${i}`} className="day-circle opacity-0"></div>;
+                                        const dateKey = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                        const isToday = new Date().toDateString() === new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day).toDateString();
+                                        const isSelected = selectedDate === dateKey;
+                                        
+                                        const dayInfo = agendaData[dateKey] || { hymns: [] };
+                                        const hasJovens = dayInfo.hymns?.some(h => h.category === 'jovens');
+                                        const hasAdol = dayInfo.hymns?.some(h => h.category === 'adolescentes');
+                                        
+                                        let statusClass = 'text-slate-600 hover:bg-slate-50';
+                                        if (hasJovens && hasAdol) statusClass = 'bg-emerald-500 text-white shadow-lg shadow-emerald-200';
+                                        else if (hasJovens) statusClass = 'bg-indigo-600 text-white shadow-lg shadow-indigo-200';
+                                        else if (hasAdol) statusClass = 'bg-rose-500 text-white shadow-lg shadow-rose-200';
+                                        else if (isToday) statusClass = 'bg-slate-200 text-slate-800';
 
-                    <main className="max-w-2xl w-full mx-auto px-5 mt-6 space-y-3 pb-40">
-                        {filteredList.map((hymn) => {
-                            const settings = hymnSettings[hymn.id];
-                            const thumb = getYoutubeThumbnail(settings?.youtubeUrl);
-                            
-                            return (
-                                <div 
-                                    key={hymn.id}
-                                    onClick={() => openEdit(hymn)}
-                                    className="hymn-card bg-white p-3 rounded-[24px] border border-slate-200/60 shadow-sm flex items-center gap-4 animate-in cursor-pointer"
-                                >
-                                    <div 
-                                        className="w-16 h-16 rounded-2xl bg-slate-100 flex-shrink-0 overflow-hidden relative flex items-center justify-center border border-slate-100 group"
-                                        onClick={(e) => {
-                                            if (settings?.youtubeUrl) {
-                                                e.stopPropagation();
-                                                window.open(settings.youtubeUrl, '_blank');
-                                            }
-                                        }}
-                                    >
-                                        {thumb ? (
-                                            <img src={thumb} className="w-full h-full object-cover group-hover:scale-110 transition-transform" alt="Capa" />
-                                        ) : (
-                                            <Icon name="music" className="w-6 h-6 text-slate-300" />
-                                        )}
-                                        {settings?.youtubeUrl && (
-                                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <div className="bg-white/90 rounded-full p-2 text-indigo-600">
-                                                    <Icon name="play" className="w-3 h-3 fill-current" />
+                                        return (
+                                            <div 
+                                                key={dateKey} 
+                                                onClick={() => setSelectedDate(dateKey)} 
+                                                className={`day-circle ${statusClass} ${isSelected ? 'ring-4 ring-indigo-300 ring-offset-2' : ''}`}
+                                            >
+                                                {day}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {selectedDate && (
+                                <div className="space-y-6 animate-in mb-10">
+                                    <div className="flex justify-between items-end px-1">
+                                        <div>
+                                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Escala do Dia</h4>
+                                            <p className="text-sm font-black text-indigo-600 uppercase">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-pt', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+                                        </div>
+                                        <button onClick={() => { setIsPickingHymns(false); setModals({...modals, dayDetail: true}); }} className="bg-indigo-600 text-white text-[9px] font-black uppercase px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-100 flex items-center gap-2 active:scale-95">
+                                            <Icon name="edit-3" className="w-3.5 h-3.5" /> Gerir Culto
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className={`p-4 rounded-3xl border-2 bg-white shadow-sm flex flex-col items-center text-center ${agendaData[selectedDate]?.regenteJovens ? 'border-indigo-100' : 'border-slate-50 opacity-40'}`}>
+                                            <p className="text-[7px] font-black text-indigo-400 uppercase tracking-widest mb-1">Jovens</p>
+                                            <p className="text-[11px] font-black text-slate-800 uppercase leading-tight">{agendaData[selectedDate]?.regenteJovens?.name || 'Vago'}</p>
+                                        </div>
+                                        <div className={`p-4 rounded-3xl border-2 bg-white shadow-sm flex flex-col items-center text-center ${agendaData[selectedDate]?.regenteAdol ? 'border-rose-100' : 'border-slate-50 opacity-40'}`}>
+                                            <p className="text-[7px] font-black text-rose-400 uppercase tracking-widest mb-1">Adolescentes</p>
+                                            <p className="text-[11px] font-black text-slate-800 uppercase leading-tight">{agendaData[selectedDate]?.regenteAdol?.name || 'Vago'}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {(agendaData[selectedDate]?.hymns || []).length > 0 ? (
+                                            agendaData[selectedDate].hymns.map(h => renderHymnCard(h, null, true))
+                                        ) : <div className="py-10 text-center bg-white rounded-[32px] border border-dashed border-slate-200"><p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Sem hinos para este dia</p></div>}
+                                    </div>
+                                </div>
+                            )}
+
+                            {!selectedDate && (
+                                <div className="space-y-4">
+                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Próximos Eventos</h4>
+                                    {nextEvents.length > 0 ? nextEvents.slice(0, 5).map(([date, data]) => (
+                                        <div key={date} onClick={() => setSelectedDate(date)} className="bg-white p-5 rounded-[32px] border border-slate-200/50 shadow-sm space-y-4 cursor-pointer active:scale-[0.99] transition-all">
+                                            <div className="flex justify-between items-center">
+                                                <p className="text-[9px] font-black text-indigo-500 uppercase">{new Date(date + 'T12:00:00').toLocaleDateString('pt-pt', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                                                <div className="flex gap-1.5">
+                                                    {data.regenteJovens && <span className="bg-indigo-50 text-indigo-600 text-[7px] font-black px-1.5 py-0.5 rounded uppercase">J: {data.regenteJovens.name}</span>}
+                                                    {data.regenteAdol && <span className="bg-rose-50 text-rose-600 text-[7px] font-black px-1.5 py-0.5 rounded uppercase">A: {data.regenteAdol.name}</span>}
                                                 </div>
                                             </div>
-                                        )}
-                                    </div>
-
-                                    <div className="flex-1 min-w-0">
-                                        <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight truncate mb-1">{hymn.displayName}</h3>
-                                        <div className="flex items-center gap-2">
-                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider shrink-0 ${CATEGORY_LABELS[hymn.displayCategory].light}`}>
-                                                {CATEGORY_LABELS[hymn.displayCategory].label}
-                                            </span>
-                                            <p className="text-[11px] font-medium text-slate-400 italic truncate">{hymn.displayArtist}</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-2">
-                                        {hymn.key && (
-                                            <div className="min-w-[40px] h-10 px-2 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg shadow-indigo-100 font-extrabold text-[12px]">
-                                                {hymn.key}
+                                            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                                                {data.hymns?.slice(0, 3).map(h => (
+                                                    <div key={h.id} className="min-w-[120px] bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                                        <p className="text-[9px] font-bold text-slate-700 uppercase truncate">{h.name}</p>
+                                                    </div>
+                                                ))}
+                                                {data.hymns?.length > 3 && <div className="flex items-center text-[9px] font-black text-slate-300">+{data.hymns.length - 3}</div>}
                                             </div>
-                                        )}
-                                        {isAdmin && (
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); setModals({...modals, delete: hymn}); }} 
-                                                className="p-3 text-slate-200 hover:text-rose-500 transition-colors"
-                                            >
-                                                <Icon name="trash-2" className="w-5 h-5" />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                        
-                        {filteredList.length === 0 && (
-                            <div className="py-24 text-center">
-                                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-dashed border-slate-200">
-                                    <Icon name="search" className="w-8 h-8 text-slate-300" />
-                                </div>
-                                <h4 className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Nenhum louvor encontrado</h4>
-                                <p className="text-slate-300 text-[9px] mt-1">Experimente outros termos de busca</p>
-                            </div>
-                        )}
-                    </main>
-
-                    {/* Modal Importação em Massa */}
-                    {modals.bulk && (
-                        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-950/40 backdrop-blur-md animate-in p-0 sm:p-4">
-                            <form onSubmit={handleBulkAdd} className="bg-white w-full max-w-lg rounded-t-[40px] sm:rounded-[32px] p-6 sm:p-8 shadow-2xl overflow-y-auto max-h-[95vh] custom-scrollbar border border-white/20">
-                                <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden"></div>
-                                <div className="text-center mb-8">
-                                    <h3 className="text-xl font-black text-slate-800 tracking-tight">IMPORTAR LISTA</h3>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Cole os nomes (um por linha)</p>
-                                </div>
-                                
-                                <div className="space-y-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase ml-2">Lista de Hinos</label>
-                                        <textarea 
-                                            required 
-                                            rows="8"
-                                            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-semibold outline-none focus:border-indigo-500 transition-all shadow-inner resize-none" 
-                                            placeholder="Hino 01&#10;Hino 02&#10;Hino 03..." 
-                                            value={bulkForm.text} 
-                                            onChange={e => setBulkForm({...bulkForm, text: e.target.value})}
-                                        />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase ml-2 px-1">Enviar para Categoria</label>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {Object.keys(CATEGORY_LABELS).map(c => (
-                                                <button 
-                                                    type="button" 
-                                                    key={c} 
-                                                    onClick={() => setBulkForm({...bulkForm, category: c})} 
-                                                    className={`py-4 rounded-2xl text-[9px] font-black uppercase border-2 transition-all ${bulkForm.category === c ? CATEGORY_LABELS[c].color + ' border-transparent text-white shadow-lg' : 'border-slate-100 text-slate-400'}`}
-                                                >
-                                                    {CATEGORY_LABELS[c].label}
-                                                </button>
-                                            ))}
                                         </div>
-                                    </div>
+                                    )) : <div className="py-20 text-center opacity-30"><Icon name="calendar" className="w-10 h-10 mx-auto mb-3" /><p className="text-[10px] font-black uppercase">Nenhum culto agendado</p></div>}
+                                </div>
+                            )}
+                        </main>
+                    )}
+
+                    {modals.dayDetail && (
+                        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-950/40 backdrop-blur-md animate-in p-0 sm:p-4">
+                            <div className="bg-white w-full max-w-lg rounded-t-[40px] sm:rounded-[32px] p-6 sm:p-8 shadow-2xl overflow-y-auto max-h-[95vh] custom-scrollbar">
+                                <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden"></div>
+                                <div className="flex justify-between items-center mb-6">
+                                    <div><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">GERIR CULTO</h3><p className="text-[10px] font-bold text-slate-400 uppercase">{selectedDate?.split('-').reverse().join('/')}</p></div>
+                                    <button onClick={() => setModals({...modals, dayDetail: false})} className="p-3 bg-slate-100 text-slate-400 rounded-full"><Icon name="x" className="w-5 h-5" /></button>
                                 </div>
 
-                                <div className="flex gap-4 pt-10 safe-pb">
-                                    <button type="button" onClick={() => setModals({...modals, bulk: false})} className="flex-1 py-4 bg-slate-100 text-[11px] font-black uppercase rounded-2xl hover:bg-slate-200 transition-all">Sair</button>
-                                    <button type="submit" disabled={isSaving || !bulkForm.text.trim()} className="flex-[2] py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2">
-                                        {isSaving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Icon name="save" className="w-4 h-4" />}
-                                        {isSaving ? 'Importando...' : 'Iniciar Importação'}
-                                    </button>
+                                {!isPickingHymns ? (
+                                    <div className="space-y-8 animate-in">
+                                        <div className="p-5 bg-slate-50 rounded-[24px] border border-slate-100 space-y-4">
+                                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Icon name="mic-2" className="w-3 h-3" /> Escala de Regência</h4>
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <p className="text-[8px] font-black text-indigo-400 uppercase mb-2">Regente Jovens</p>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {regentes.filter(r => r.category === 'jovens').map(r => (
+                                                            <button key={r.id} onClick={() => setRegenteForAgenda('jovens', agendaData[selectedDate]?.regenteJovens?.id === r.id ? null : r)} className={`p-3 rounded-xl text-[10px] font-black uppercase tracking-tight border-2 transition-all ${agendaData[selectedDate]?.regenteJovens?.id === r.id ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-white text-slate-400'}`}>{r.name}</button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[8px] font-black text-rose-400 uppercase mb-2">Regente Adolescentes</p>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {regentes.filter(r => r.category === 'adolescentes').map(r => (
+                                                            <button key={r.id} onClick={() => setRegenteForAgenda('adolescentes', agendaData[selectedDate]?.regenteAdol?.id === r.id ? null : r)} className={`p-3 rounded-xl text-[10px] font-black uppercase tracking-tight border-2 transition-all ${agendaData[selectedDate]?.regenteAdol?.id === r.id ? 'bg-rose-500 border-rose-500 text-white shadow-md' : 'bg-white border-white text-slate-400'}`}>{r.name}</button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center px-1">
+                                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Icon name="music" className="w-3 h-3" /> Hinos Selecionados</h4>
+                                                <button onClick={() => setIsPickingHymns(true)} className="text-[9px] font-black text-indigo-600 uppercase bg-indigo-50 px-3 py-2 rounded-xl flex items-center gap-2 active:scale-95"><Icon name="plus" className="w-3 h-3" /> Escolher Hinos</button>
+                                            </div>
+                                            <div className="space-y-3">
+                                                {(agendaData[selectedDate]?.hymns || []).length > 0 ? (
+                                                    agendaData[selectedDate].hymns.map(h => renderHymnCard(h, null, true))
+                                                ) : <div className="py-8 text-center bg-slate-50 rounded-[24px] border border-dashed border-slate-200"><p className="text-[10px] text-slate-300 font-bold uppercase">Nenhum hino escalado</p></div>}
+                                            </div>
+                                        </div>
+                                        <button onClick={() => setModals({...modals, dayDetail: false})} className="w-full py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl shadow-xl active:scale-95 mt-4">Concluir Gestão</button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4 animate-in">
+                                        <div className="flex items-center gap-3 mb-6">
+                                            <button onClick={() => setIsPickingHymns(false)} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200"><Icon name="chevron-left" className="w-4 h-4" /></button>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase">Voltar ao Culto</p>
+                                        </div>
+                                        <div className="relative"><Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input type="text" placeholder="Filtrar do repertório..." className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 pl-11 pr-4 text-sm font-semibold outline-none focus:border-indigo-500 transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+                                        <div className="max-h-[50vh] overflow-y-auto custom-scrollbar space-y-2 p-1">
+                                            {(searchTerm ? allHymns.filter(h => (h.displayName || h.name || '').toLowerCase().includes(searchTerm.toLowerCase())) : []).map(h => {
+                                                const isSelected = (agendaData[selectedDate]?.hymns || []).some(ah => ah.id === h.id);
+                                                const displayCat = h.displayCategory || h.category || 'jovens';
+                                                return (<button key={h.id} onClick={() => toggleAgendaHymn(h)} className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${isSelected ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' : 'bg-white border-slate-50 text-slate-600 hover:border-indigo-100'}`}><div className="text-left"><p className="text-[11px] font-black uppercase tracking-tight">{h.displayName || h.name}</p><span className={`text-[7px] font-black px-1 py-0.5 rounded uppercase ${CATEGORY_LABELS[displayCat]?.light || 'bg-slate-100'}`}>{CATEGORY_LABELS[displayCat]?.label || 'Livre'}</span></div><Icon name={isSelected ? "check-circle" : "plus-circle"} className="w-5 h-5" /></button>);
+                                            })}
+                                        </div>
+                                        <button onClick={() => setIsPickingHymns(false)} className="w-full py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl shadow-xl active:scale-95 mt-4">Confirmar Hinos</button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {modals.regentes && (
+                        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-in">
+                            <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl border border-white/20 max-h-[85vh] flex flex-col">
+                                <div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-black text-slate-800 tracking-tight uppercase">REGENTES</h3><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Base de Dados</p></div><button onClick={() => setModals({...modals, regentes: false})} className="p-2 bg-slate-100 text-slate-400 rounded-full"><Icon name="x" className="w-5 h-5" /></button></div>
+                                <form onSubmit={handleAddRegente} className="mb-6 space-y-3 p-4 bg-slate-50 rounded-[24px] border border-slate-100">
+                                    <input required className="w-full bg-white border-2 border-slate-100 rounded-xl py-3 px-4 text-sm font-bold outline-none focus:border-indigo-500" placeholder="Nome" value={regenteForm.name} onChange={e => setRegenteForm({...regenteForm, name: e.target.value})} />
+                                    <div className="flex gap-2">
+                                        <button type="button" onClick={() => setRegenteForm({...regenteForm, category: 'jovens'})} className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase border-2 transition-all ${regenteForm.category === 'jovens' ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-white text-slate-400'}`}>Jovens</button>
+                                        <button type="button" onClick={() => setRegenteForm({...regenteForm, category: 'adolescentes'})} className={`flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase border-2 transition-all ${regenteForm.category === 'adolescentes' ? 'bg-rose-500 border-rose-500 text-white' : 'bg-white border-white text-slate-400'}`}>Adol.</button>
+                                    </div>
+                                    <button type="submit" disabled={isSaving} className="w-full py-3.5 bg-indigo-700 text-white text-[10px] font-black uppercase rounded-xl shadow-lg active:scale-95 transition-all">Registar</button>
+                                </form>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">{regentes.map(r => (<div key={r.id} className="flex items-center justify-between p-3.5 bg-white rounded-xl border border-slate-100 shadow-sm"><div className="flex flex-col"><span className="text-[11px] font-black uppercase text-slate-700 leading-tight">{r.name}</span><span className={`text-[7px] font-black uppercase ${CATEGORY_LABELS[r.category]?.light || 'bg-slate-100'} w-fit px-1 py-0.5 rounded mt-1`}>{CATEGORY_LABELS[r.category]?.label}</span></div><button onClick={() => handleDeleteRegente(r.id)} className="p-2 text-slate-200 hover:text-rose-500 transition-colors"><Icon name="trash-2" className="w-4 h-4" /></button></div>))}</div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {modals.add && (
+                        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-950/40 backdrop-blur-md animate-in p-0 sm:p-4">
+                            <form onSubmit={handleAddHymn} className="bg-white w-full max-w-lg rounded-t-[40px] sm:rounded-[32px] p-6 sm:p-8 shadow-2xl overflow-y-auto max-h-[95vh] custom-scrollbar border border-white/20">
+                                <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden"></div>
+                                <div className="text-center mb-8"><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">NOVO LOUVOR</h3></div>
+                                <div className="space-y-5">
+                                    <div className="space-y-2"><label className="text-[10px] font-extrabold text-slate-500 uppercase ml-2">Título *</label><input required className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 font-bold text-sm outline-none focus:border-indigo-500 transition-all" placeholder="Nome da música" value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
+                                    <div className="space-y-2"><label className="text-[10px] font-extrabold text-slate-500 uppercase ml-2 px-1">Categoria</label><div className="grid grid-cols-3 gap-2">{Object.keys(CATEGORY_LABELS).map(c => <button type="button" key={c} onClick={() => setForm({...form, category: c})} className={`py-4 rounded-2xl text-[9px] font-black uppercase border-2 transition-all ${form.category === c ? CATEGORY_LABELS[c].color + ' border-transparent text-white shadow-lg' : 'border-slate-100 text-slate-400'}`}>{CATEGORY_LABELS[c].label}</button>)}</div></div>
+                                    <div className="space-y-2"><label className="text-[10px] font-extrabold text-slate-500 uppercase ml-2 block">Tom Sugerido</label><div className="grid grid-cols-6 gap-2 p-3 bg-slate-50 rounded-[24px] border border-slate-100 max-h-40 overflow-y-auto custom-scrollbar">{HARMONIC_SCALE.map(note => <button type="button" key={note} onClick={() => setForm({...form, key: note})} className={`py-2.5 rounded-xl font-black text-[10px] transition-all border-2 ${form.key === note ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-white text-slate-400'}`}>{note}</button>)}</div></div>
                                 </div>
+                                <div className="flex gap-4 pt-8 safe-pb"><button type="button" onClick={() => setModals({...modals, add: false})} className="flex-1 py-4 bg-slate-100 text-[11px] font-black uppercase rounded-2xl">Sair</button><button type="submit" disabled={isSaving || !form.name} className="flex-[2] py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl shadow-xl active:scale-95 transition-all">Guardar</button></div>
                             </form>
                         </div>
                     )}
 
-                    {/* Edit Modal */}
+                    {modals.bulk && (
+                        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-950/40 backdrop-blur-md animate-in p-0 sm:p-4">
+                            <form onSubmit={handleBulkAdd} className="bg-white w-full max-w-lg rounded-t-[40px] sm:rounded-[32px] p-6 sm:p-8 shadow-2xl border border-white/20">
+                                <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden"></div>
+                                <div className="text-center mb-8"><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">IMPORTAR LISTA</h3></div>
+                                <div className="space-y-6">
+                                    <textarea required rows="8" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm font-semibold outline-none focus:border-indigo-500 transition-all resize-none" placeholder="Título 1&#10;Título 2..." value={bulkForm.text} onChange={e => setBulkForm({...bulkForm, text: e.target.value})} />
+                                    <div className="space-y-2"><label className="text-[10px] font-extrabold text-slate-500 uppercase px-1">Categoria de Destino</label><div className="grid grid-cols-3 gap-2">{Object.keys(CATEGORY_LABELS).map(c => <button type="button" key={c} onClick={() => setBulkForm({...bulkForm, category: c})} className={`py-4 rounded-2xl text-[9px] font-black uppercase border-2 transition-all ${bulkForm.category === c ? CATEGORY_LABELS[c].color + ' border-transparent text-white shadow-lg' : 'border-slate-100 text-slate-400'}`}>{CATEGORY_LABELS[c].label}</button>)}</div></div>
+                                </div>
+                                <div className="flex gap-4 pt-10 safe-pb"><button type="button" onClick={() => setModals({...modals, bulk: false})} className="flex-1 py-4 bg-slate-100 text-[11px] font-black uppercase rounded-2xl">Fechar</button><button type="submit" disabled={isSaving} className="flex-[2] py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl active:scale-95">Importar Agora</button></div>
+                            </form>
+                        </div>
+                    )}
+
                     {selectedHymn && (
                         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-950/40 backdrop-blur-md animate-in p-0 sm:p-4">
                             <div className="bg-white w-full max-w-lg rounded-t-[40px] sm:rounded-[32px] p-6 sm:p-8 shadow-2xl overflow-y-auto max-h-[95vh] custom-scrollbar border border-white/20">
                                 <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden"></div>
-                                <div className="flex justify-between items-center mb-8">
-                                    <div>
-                                        <h3 className="text-xl font-black text-slate-800 tracking-tight">DETALHES DO LOUVOR</h3>
-                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Ajuste as informações principais</p>
-                                    </div>
-                                    <button onClick={() => setSelectedHymn(null)} className="p-3 bg-slate-100 text-slate-400 rounded-full hover:bg-slate-200 transition-all">
-                                        <Icon name="x" className="w-5 h-5" />
-                                    </button>
-                                </div>
-
+                                <div className="flex justify-between items-center mb-8"><div><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">EDITAR LOUVOR</h3></div><button onClick={() => setSelectedHymn(null)} className="p-3 bg-slate-100 text-slate-400 rounded-full"><Icon name="x" className="w-5 h-5" /></button></div>
                                 <div className="space-y-6">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1">Título</label>
-                                            <input type="text" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3.5 px-5 text-sm font-bold focus:border-indigo-500 outline-none transition-all shadow-sm" value={tempData.name} onChange={e => setTempData({...tempData, name: e.target.value})} />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1">Artista</label>
-                                            <input type="text" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3.5 px-5 text-sm font-bold focus:border-indigo-500 outline-none transition-all shadow-sm" value={tempData.artist} onChange={e => setTempData({...tempData, artist: e.target.value})} />
-                                        </div>
+                                        <div className="space-y-2"><label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1">Título</label><input type="text" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3.5 px-5 text-sm font-bold focus:border-indigo-500 transition-all outline-none" value={tempData.name} onChange={e => setTempData({...tempData, name: e.target.value})} /></div>
+                                        <div className="space-y-2"><label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1">Artista</label><input type="text" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3.5 px-5 text-sm font-bold focus:border-indigo-500 transition-all outline-none" value={tempData.artist} onChange={e => setTempData({...tempData, artist: e.target.value})} /></div>
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1">Link YouTube</label>
-                                        <input type="text" placeholder="https://youtube.com/..." className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3.5 px-5 text-sm focus:border-indigo-500 outline-none transition-all" value={tempData.youtube} onChange={e => setTempData({...tempData, youtube: e.target.value})} />
-                                    </div>
-                                    
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1">Categoria de Grupo</label>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {Object.keys(CATEGORY_LABELS).map(c => (
-                                                <button 
-                                                    key={c} type="button" onClick={() => setTempData({...tempData, category: c})} 
-                                                    className={`py-4 rounded-2xl text-[9px] font-black uppercase tracking-wider border-2 transition-all ${tempData.category === c ? CATEGORY_LABELS[c].color + ' border-transparent text-white shadow-lg' : 'border-slate-100 text-slate-400 hover:border-slate-200'}`}
-                                                >
-                                                    {CATEGORY_LABELS[c].label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1 block">Tom Principal</label>
-                                        <div className="grid grid-cols-6 gap-2 p-3 bg-slate-50 rounded-[24px] border border-slate-100 max-h-48 overflow-y-auto custom-scrollbar">
-                                            {HARMONIC_SCALE.map(note => (
-                                                <button key={note} onClick={() => setTempData({...tempData, key: note})} className={`py-2.5 rounded-xl font-black text-[10px] transition-all border-2 ${tempData.key === note ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white text-slate-400 border-white hover:border-indigo-100'}`}>
-                                                    {note}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
+                                    <div className="space-y-2"><label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1">YouTube</label><input type="text" placeholder="URL do vídeo" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3.5 px-5 text-sm focus:border-indigo-500 outline-none" value={tempData.youtube} onChange={e => setTempData({...tempData, youtube: e.target.value})} /></div>
+                                    <div className="space-y-2"><label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1">Categoria</label><div className="grid grid-cols-3 gap-2">{Object.keys(CATEGORY_LABELS).map(c => <button key={c} type="button" onClick={() => setTempData({...tempData, category: c})} className={`py-4 rounded-2xl text-[9px] font-black uppercase border-2 transition-all ${tempData.category === c ? CATEGORY_LABELS[c].color + ' border-transparent text-white shadow-lg' : 'border-slate-100 text-slate-400'}`}>{CATEGORY_LABELS[c].label}</button>)}</div></div>
+                                    <div className="space-y-2"><label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1 block">Tom</label><div className="grid grid-cols-6 gap-2 p-3 bg-slate-50 rounded-[24px] border border-slate-100 max-h-48 overflow-y-auto custom-scrollbar">{HARMONIC_SCALE.map(note => <button key={note} onClick={() => setTempData({...note, key: note})} className={`py-2.5 rounded-xl font-black text-[10px] transition-all border-2 ${tempData.key === note ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white text-slate-400 border-white hover:border-indigo-100'}`}>{note}</button>)}</div></div>
                                 </div>
-
-                                <div className="flex gap-4 mt-10 safe-pb">
-                                    <button onClick={() => setSelectedHymn(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 text-[11px] font-black uppercase rounded-2xl hover:bg-slate-200 transition-all">Cancelar</button>
-                                    <button onClick={handleSaveSettings} disabled={isSaving} className="flex-[2] py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl shadow-xl shadow-indigo-200 active:scale-95 transition-all flex items-center justify-center gap-2">
-                                        {isSaving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Icon name="check" className="w-4 h-4" />}
-                                        {isSaving ? 'Salvando...' : 'Confirmar'}
-                                    </button>
-                                </div>
+                                <div className="flex gap-4 mt-10 safe-pb"><button onClick={() => setSelectedHymn(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 text-[11px] font-black uppercase rounded-2xl">Voltar</button><button onClick={handleSaveSettings} disabled={isSaving} className="flex-[2] py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl shadow-xl active:scale-95 transition-all">Guardar</button></div>
                             </div>
                         </div>
                     )}
-
-                    {/* Modal Cadastro Único */}
-                    {modals.add && (
-                        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-950/40 backdrop-blur-md animate-in p-0 sm:p-4">
-                            <form onSubmit={handleAddHymn} className="bg-white w-full max-w-lg rounded-t-[40px] sm:rounded-[32px] p-6 sm:p-8 shadow-2xl overflow-y-auto max-h-[95vh] custom-scrollbar">
-                                <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden"></div>
-                                <div className="text-center mb-8">
-                                    <h3 className="text-xl font-black text-slate-800 tracking-tight">ADICIONAR LOUVOR</h3>
-                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Preencha os campos abaixo</p>
-                                </div>
-                                
-                                <div className="space-y-5">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase ml-2">Título *</label>
-                                        <input required className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 font-bold text-sm outline-none focus:border-indigo-500 transition-all" placeholder="Ex: Alfa e Ômega" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase ml-2">Artista</label>
-                                        <input className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 font-bold text-sm outline-none focus:border-indigo-500 transition-all" placeholder="Ex: Coral Resgate" value={form.artist} onChange={e => setForm({...form, artist: e.target.value})} />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase ml-2">Link YouTube</label>
-                                        <input className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-5 text-sm outline-none focus:border-indigo-500 transition-all" placeholder="Opcional" value={form.youtubeUrl} onChange={e => setForm({...form, youtubeUrl: e.target.value})} />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase ml-2 px-1">Grupo Responsável</label>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {Object.keys(CATEGORY_LABELS).map(c => (
-                                                <button type="button" key={c} onClick={() => setForm({...form, category: c})} className={`py-4 rounded-2xl text-[9px] font-black uppercase border-2 transition-all ${form.category === c ? CATEGORY_LABELS[c].color + ' border-transparent text-white shadow-lg shadow-indigo-100' : 'border-slate-100 text-slate-400'}`}>
-                                                    {CATEGORY_LABELS[c].label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-extrabold text-slate-500 uppercase ml-2 block">Tom Sugerido</label>
-                                        <div className="grid grid-cols-6 gap-2 p-3 bg-slate-50 rounded-[24px] border border-slate-100 max-h-40 overflow-y-auto custom-scrollbar">
-                                            {HARMONIC_SCALE.map(note => (
-                                                <button type="button" key={note} onClick={() => setForm({...form, key: note})} className={`py-2.5 rounded-xl font-black text-[10px] transition-all border-2 ${form.key === note ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-white text-slate-400'}`}>
-                                                    {note}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-4 pt-8 safe-pb">
-                                    <button type="button" onClick={() => setModals({...modals, add: false})} className="flex-1 py-4 bg-slate-100 text-[11px] font-black uppercase rounded-2xl">Sair</button>
-                                    <button type="submit" disabled={isSaving || !form.name} className="flex-[2] py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl shadow-xl active:scale-95 transition-all">
-                                        {isSaving ? 'Gravando...' : 'Salvar no Repertório'}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    )}
-
-                    <footer className="fixed bottom-0 left-0 right-0 z-30 bg-white/60 backdrop-blur-2xl border-t border-slate-200 safe-pb">
-                        <div className="max-w-2xl mx-auto px-6 py-4 flex flex-col items-center gap-3">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">AD PERUS • ALMANARA</p>
-                            <div className="w-12 h-1 bg-slate-100 rounded-full"></div>
-                        </div>
-                    </footer>
 
                     {modals.admin && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/90 backdrop-blur-xl animate-in">
                             <div className="bg-white w-full max-w-xs rounded-[32px] p-8 text-center shadow-2xl">
-                                <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-[20px] flex items-center justify-center mx-auto mb-8 shadow-inner border border-indigo-100">
-                                    <Icon name="shield-check" className="w-8 h-8" />
-                                </div>
-                                <h4 className="text-slate-800 font-black text-sm uppercase tracking-tight mb-2">AUTENTICAÇÃO ADM</h4>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-8">Insira o PIN de acesso</p>
-                                
-                                <input 
-                                    type="password" 
-                                    autoFocus
-                                    placeholder="••••" 
-                                    className="w-full bg-slate-100 rounded-2xl py-5 text-center font-black text-3xl tracking-[0.6em] focus:ring-4 focus:ring-indigo-500/10 outline-none mb-8 border-none"
-                                    onChange={e => {
-                                        if (e.target.value === ADMIN_PIN) {
-                                            setIsAdmin(true);
-                                            setModals({...modals, admin: false});
-                                            showToast("Acesso Administrativo Liberado");
-                                        }
-                                    }}
-                                />
-                                <button onClick={() => setModals({...modals, admin: false})} className="w-full py-4 text-slate-400 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 rounded-2xl transition-all">Cancelar</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {modals.delete && (
-                        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-md animate-in">
-                            <div className="bg-white w-full max-w-xs rounded-[32px] p-8 shadow-2xl text-center border border-white/20">
-                                <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-[20px] flex items-center justify-center mx-auto mb-6 shadow-inner border border-rose-100">
-                                    <Icon name="alert-circle" className="w-8 h-8" />
-                                </div>
-                                <h3 className="font-black text-slate-800 uppercase text-sm mb-2 tracking-tight">REMOVER LOUVOR?</h3>
-                                <p className="text-[11px] text-slate-400 mb-8 px-2 leading-relaxed font-semibold">
-                                    O item <span className="text-slate-600">"{modals.delete.displayName}"</span> será ocultado ou removido.
-                                </p>
-                                <div className="space-y-2">
-                                    <button onClick={executeDelete} disabled={isSaving} className="w-full py-4 bg-rose-600 text-white text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-rose-200">
-                                        Confirmar Exclusão
-                                    </button>
-                                    <button onClick={() => setModals({...modals, delete: null})} className="w-full py-4 text-slate-400 text-[10px] font-black uppercase rounded-2xl">Voltar</button>
-                                </div>
+                                <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-[20px] flex items-center justify-center mx-auto mb-8 shadow-inner border border-indigo-100"><Icon name="shield-check" className="w-8 h-8" /></div>
+                                <h4 className="text-slate-800 font-black text-sm uppercase tracking-tight mb-2 text-center">LOGIN ADM</h4>
+                                <input type="password" autoFocus placeholder="••••" className="w-full bg-slate-100 rounded-2xl py-5 text-center font-black text-3xl tracking-[0.6em] focus:ring-4 focus:ring-indigo-500/10 outline-none mb-8 border-none" onChange={e => { if (e.target.value === ADMIN_PIN) { setIsAdmin(true); setModals({...modals, admin: false}); showToast("Acesso Liberado"); } }} />
+                                <button onClick={() => setModals({...modals, admin: false})} className="w-full py-4 text-slate-400 text-[10px] font-black uppercase tracking-widest">Fechar</button>
                             </div>
                         </div>
                     )}
@@ -774,9 +686,7 @@
                     {toast.show && (
                         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[300] animate-in pointer-events-none">
                             <div className="bg-slate-900/95 backdrop-blur-xl text-white px-6 py-4 rounded-[20px] flex items-center gap-3 shadow-2xl border border-white/10 ring-4 ring-black/5">
-                                <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
-                                    <Icon name="check" className="text-white w-3 h-3" />
-                                </div>
+                                <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center"><Icon name="check" className="text-white w-3 h-3" /></div>
                                 <span className="text-[10px] font-black uppercase tracking-widest">{toast.msg}</span>
                             </div>
                         </div>
