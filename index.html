@@ -101,6 +101,18 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, memo } = React;
 
+        // --- UTILITÁRIOS ---
+        const getYoutubeId = (url) => {
+            if (!url) return null;
+            const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
+            return (match && match[2].length === 11) ? match[2] : null;
+        };
+
+        const getYoutubeThumbnail = (url) => {
+            const id = getYoutubeId(url);
+            return id ? `https://img.youtube.com/vi/${id}/mqdefault.jpg` : null;
+        };
+
         const CATEGORY_LABELS = {
             jovens: { label: 'Jovens', color: 'bg-indigo-600', light: 'bg-indigo-50 text-indigo-600', border: 'border-indigo-100' },
             adolescentes: { label: 'Adolescentes', color: 'bg-rose-500', light: 'bg-rose-50 text-rose-600', border: 'border-rose-100' },
@@ -264,6 +276,7 @@
                 setIsSaving(true);
                 try {
                     const docRef = doc(services.current.db, 'artifacts', appId, 'public', 'data', 'hymnSettings', selectedHymn.id);
+                    // Garante que todos os campos do tempData são persistidos
                     await setDoc(docRef, { ...tempData, updatedAt: serverTimestamp() }, { merge: true });
                     showToast("Louvor atualizado!");
                     setSelectedHymn(null);
@@ -279,7 +292,7 @@
                     const colRef = collection(services.current.db, 'artifacts', appId, 'public', 'data', 'customHymns');
                     const docRef = await addDoc(colRef, { name: form.name, artist: form.artist || 'Desconhecido', category: form.category || 'jovens', createdAt: serverTimestamp() });
                     const settingsRef = doc(services.current.db, 'artifacts', appId, 'public', 'data', 'hymnSettings', docRef.id);
-                    await setDoc(settingsRef, { key: form.key || '', youtubeUrl: form.youtubeUrl || '', category: form.category || 'jovens', updatedAt: serverTimestamp() }, { merge: true });
+                    await setDoc(settingsRef, { name: form.name, artist: form.artist || 'Desconhecido', key: form.key || '', youtubeUrl: form.youtubeUrl || '', category: form.category || 'jovens', updatedAt: serverTimestamp() }, { merge: true });
                     showToast("Hino adicionado!");
                     setForm({ name: '', artist: '', category: 'jovens', youtubeUrl: '', key: '' });
                     setModals({ ...modals, add: false });
@@ -335,8 +348,22 @@
                 if (!selectedDate) return;
                 const { doc, setDoc } = window.FirebaseLib;
                 const dayInfo = agendaData[selectedDate] || { hymns: [] };
-                const isSelected = dayInfo.hymns?.some(h => h.id === hymn.id);
-                const newList = isSelected ? dayInfo.hymns.filter(h => h.id !== hymn.id) : [...(dayInfo.hymns || []), { id: hymn.id, name: hymn.displayName || hymn.name, artist: hymn.displayArtist || hymn.artist, category: hymn.displayCategory || hymn.category || 'jovens' }];
+                const currentHymns = dayInfo.hymns || [];
+                const isSelected = currentHymns.some(h => h.id === hymn.id);
+                
+                // CRITICAL FIX: Ensure displayCategory is resolved here too
+                const s = hymnSettings[hymn.id];
+                const displayCat = s?.category || hymn.displayCategory || hymn.category || 'jovens';
+
+                const updatedHymnData = { 
+                    id: hymn.id, 
+                    name: s?.name || hymn.displayName || hymn.name, 
+                    artist: s?.artist || hymn.displayArtist || hymn.artist, 
+                    category: displayCat
+                };
+
+                const newList = isSelected ? currentHymns.filter(h => h.id !== hymn.id) : [...currentHymns, updatedHymnData];
+                
                 try { await setDoc(doc(services.current.db, 'artifacts', appId, 'public', 'data', 'agenda', selectedDate), { hymns: newList }, { merge: true }); } catch (e) { showToast("Erro."); }
             };
 
@@ -353,14 +380,15 @@
             const renderHymnCard = (hymn, onClick = null, isAgendaView = false) => {
                 const settings = hymnSettings[hymn.id];
                 const thumb = getYoutubeThumbnail(settings?.youtubeUrl);
-                const catKey = hymn.category || hymn.displayCategory;
+                // CRITICAL FIX: Use displayCategory which holds the updated category from Firebase
+                const catKey = hymn.displayCategory || hymn.category || 'jovens';
                 const cat = CATEGORY_LABELS[catKey] || CATEGORY_LABELS.jovens;
                 const key = settings?.key || hymn.key;
 
                 return (
                     <div key={hymn.id} onClick={onClick} className="hymn-card bg-white p-3 rounded-[24px] border border-slate-200/60 shadow-sm flex items-center gap-4 animate-in cursor-pointer">
                         <div 
-                            className={`w-16 h-16 rounded-2xl bg-slate-100 flex-shrink-0 overflow-hidden flex items-center justify-center border border-slate-100 group relative ${settings?.youtubeUrl ? 'cursor-pointer hover:ring-2 hover:ring-indigo-300' : ''}`}
+                            className={`w-16 h-16 rounded-2xl bg-slate-100 flex-shrink-0 overflow-hidden flex items-center justify-center border border-slate-100 group relative ${settings?.youtubeUrl ? 'cursor-pointer' : ''}`}
                             onClick={(e) => {
                                 if (settings?.youtubeUrl) {
                                     e.stopPropagation();
@@ -402,22 +430,16 @@
                 );
             };
 
-            const getYoutubeThumbnail = (url) => {
-                if (!url) return null;
-                const match = url.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/);
-                return (match && match[2].length === 11) ? `https://img.youtube.com/vi/${match[2]}/mqdefault.jpg` : null;
-            };
-
-            const [currentMonth, setCurrentMonth] = useState(new Date());
-            const calendarDays = useMemo(() => {
-                const y = currentMonth.getFullYear(); const m = currentMonth.getMonth();
+            const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
+            const calendarDaysArr = useMemo(() => {
+                const y = currentMonthDate.getFullYear(); const m = currentMonthDate.getMonth();
                 const days = []; const offset = new Date(y, m, 1).getDay(); const total = new Date(y, m + 1, 0).getDate();
                 for (let i = 0; i < offset; i++) days.push(null);
                 for (let i = 1; i <= total; i++) days.push(i);
                 return days;
-            }, [currentMonth]);
+            }, [currentMonthDate]);
 
-            const nextEvents = useMemo(() => {
+            const nextEventsList = useMemo(() => {
                 return Object.entries(agendaData)
                     .filter(([date, data]) => new Date(date) >= new Date().setHours(0,0,0,0) && (data.hymns?.length > 0 || data.regenteJovens || data.regenteAdol))
                     .sort(([a], [b]) => a.localeCompare(b));
@@ -430,7 +452,7 @@
                             <div className="flex items-center justify-between mb-5">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/20"><Icon name="library" className="w-5 h-5" /></div>
-                                    <h1 className="text-lg font-extrabold tracking-tight">ALMANARA</h1>
+                                    <h1 className="text-lg font-extrabold tracking-tight uppercase">ALMANARA</h1>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     {isAdmin && (
@@ -476,16 +498,16 @@
                         <main className="max-w-2xl w-full mx-auto px-5 mt-8 animate-in pb-40">
                             <div className="bg-white rounded-[32px] p-6 shadow-xl border border-slate-200/60 mb-8">
                                 <div className="flex items-center justify-between mb-8">
-                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="p-2 text-indigo-600"><Icon name="chevron-left" className="w-6 h-6" /></button>
-                                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{currentMonth.toLocaleString('pt-pt', { month: 'long', year: 'numeric' })}</h3>
-                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="p-2 text-indigo-600"><Icon name="chevron-right" className="w-6 h-6" /></button>
+                                    <button onClick={() => setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1))} className="p-2 text-indigo-600"><Icon name="chevron-left" className="w-6 h-6" /></button>
+                                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{currentMonthDate.toLocaleString('pt-pt', { month: 'long', year: 'numeric' })}</h3>
+                                    <button onClick={() => setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1))} className="p-2 text-indigo-600"><Icon name="chevron-right" className="w-6 h-6" /></button>
                                 </div>
                                 <div className="calendar-grid mb-4">
                                     {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(d => <div key={d} className="text-center text-[10px] font-black text-slate-300 uppercase py-2">{d}</div>)}
-                                    {calendarDays.map((day, i) => {
+                                    {calendarDaysArr.map((day, i) => {
                                         if (!day) return <div key={`empty-${i}`} className="day-circle opacity-0"></div>;
-                                        const dateKey = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                                        const isToday = new Date().toDateString() === new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day).toDateString();
+                                        const dateKey = `${currentMonthDate.getFullYear()}-${String(currentMonthDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                        const isToday = new Date().toDateString() === new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), day).toDateString();
                                         const isSelected = selectedDate === dateKey;
                                         
                                         const dayInfo = agendaData[dateKey] || { hymns: [] };
@@ -518,19 +540,19 @@
                                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Escala do Dia</h4>
                                             <p className="text-sm font-black text-indigo-600 uppercase">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-pt', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
                                         </div>
-                                        <button onClick={() => { setIsPickingHymns(false); setModals({...modals, dayDetail: true}); }} className="bg-indigo-600 text-white text-[9px] font-black uppercase px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-100 flex items-center gap-2 active:scale-95">
+                                        <button onClick={() => { setIsPickingHymns(false); setModals({...modals, dayDetail: true}); }} className="bg-indigo-600 text-white text-[9px] font-black uppercase px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-100 flex items-center gap-2 active:scale-95 transition-all">
                                             <Icon name="edit-3" className="w-3.5 h-3.5" /> Gerir Culto
                                         </button>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-3">
-                                        <div className={`p-4 rounded-3xl border-2 bg-white shadow-sm flex flex-col items-center text-center ${agendaData[selectedDate]?.regenteJovens ? 'border-indigo-100' : 'border-slate-50 opacity-40'}`}>
-                                            <p className="text-[7px] font-black text-indigo-400 uppercase tracking-widest mb-1">Jovens</p>
-                                            <p className="text-[11px] font-black text-slate-800 uppercase leading-tight">{agendaData[selectedDate]?.regenteJovens?.name || 'Vago'}</p>
+                                        <div className={`p-4 rounded-3xl border-2 bg-white shadow-sm flex flex-col items-center text-center ${agendaData[selectedDate]?.regenteJovens ? 'border-indigo-500 bg-indigo-50/30' : 'border-slate-50 opacity-40'}`}>
+                                            <p className="text-[7px] font-black text-indigo-500 uppercase tracking-widest mb-1">Regente Jovens</p>
+                                            <p className="text-xs font-black text-slate-800 uppercase leading-tight">{agendaData[selectedDate]?.regenteJovens?.name || 'Vago'}</p>
                                         </div>
-                                        <div className={`p-4 rounded-3xl border-2 bg-white shadow-sm flex flex-col items-center text-center ${agendaData[selectedDate]?.regenteAdol ? 'border-rose-100' : 'border-slate-50 opacity-40'}`}>
-                                            <p className="text-[7px] font-black text-rose-400 uppercase tracking-widest mb-1">Adolescentes</p>
-                                            <p className="text-[11px] font-black text-slate-800 uppercase leading-tight">{agendaData[selectedDate]?.regenteAdol?.name || 'Vago'}</p>
+                                        <div className={`p-4 rounded-3xl border-2 bg-white shadow-sm flex flex-col items-center text-center ${agendaData[selectedDate]?.regenteAdol ? 'border-rose-500 bg-rose-50/30' : 'border-slate-50 opacity-40'}`}>
+                                            <p className="text-[7px] font-black text-rose-500 uppercase tracking-widest mb-1">Regente Adol.</p>
+                                            <p className="text-xs font-black text-slate-800 uppercase leading-tight">{agendaData[selectedDate]?.regenteAdol?.name || 'Vago'}</p>
                                         </div>
                                     </div>
 
@@ -545,7 +567,7 @@
                             {!selectedDate && (
                                 <div className="space-y-4">
                                     <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Próximos Eventos</h4>
-                                    {nextEvents.length > 0 ? nextEvents.slice(0, 5).map(([date, data]) => (
+                                    {nextEventsList.length > 0 ? nextEventsList.slice(0, 5).map(([date, data]) => (
                                         <div key={date} onClick={() => setSelectedDate(date)} className="bg-white p-5 rounded-[32px] border border-slate-200/50 shadow-sm space-y-4 cursor-pointer active:scale-[0.99] transition-all">
                                             <div className="flex justify-between items-center">
                                                 <p className="text-[9px] font-black text-indigo-500 uppercase">{new Date(date + 'T12:00:00').toLocaleDateString('pt-pt', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
@@ -569,14 +591,14 @@
                         </main>
                     )}
 
-                    {/* Modals */}
+                    {/* Modal Day Detail (GERIR ESCALA) */}
                     {modals.dayDetail && (
                         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-950/40 backdrop-blur-md animate-in p-0 sm:p-4">
-                            <div className="bg-white w-full max-w-lg rounded-t-[40px] sm:rounded-[32px] p-6 sm:p-8 shadow-2xl overflow-y-auto max-h-[95vh] custom-scrollbar">
+                            <div className="bg-white w-full max-w-lg rounded-t-[40px] sm:rounded-[32px] p-6 sm:p-8 shadow-2xl overflow-y-auto max-h-[95vh] custom-scrollbar border border-white/20">
                                 <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden"></div>
                                 <div className="flex justify-between items-center mb-6">
                                     <div><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">GERIR CULTO</h3><p className="text-[10px] font-bold text-slate-400 uppercase">{selectedDate?.split('-').reverse().join('/')}</p></div>
-                                    <button onClick={() => setModals({...modals, dayDetail: false})} className="p-3 bg-slate-100 text-slate-400 rounded-full"><Icon name="x" className="w-5 h-5" /></button>
+                                    <button onClick={() => setModals({...modals, dayDetail: false})} className="p-3 bg-slate-100 text-slate-400 rounded-full hover:bg-slate-200 transition-all"><Icon name="x" className="w-5 h-5" /></button>
                                 </div>
 
                                 {!isPickingHymns ? (
@@ -614,7 +636,7 @@
                                                 ) : <div className="py-8 text-center bg-slate-50 rounded-[24px] border border-dashed border-slate-200"><p className="text-[10px] text-slate-300 font-bold uppercase">Nenhum hino escalado</p></div>}
                                             </div>
                                         </div>
-                                        <button onClick={() => setModals({...modals, dayDetail: false})} className="w-full py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl shadow-xl active:scale-95 mt-4">Concluir Gestão</button>
+                                        <button onClick={() => setModals({...modals, dayDetail: false})} className="w-full py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl shadow-xl active:scale-95 mt-4">Guardar Alterações</button>
                                     </div>
                                 ) : (
                                     <div className="space-y-4 animate-in">
@@ -622,12 +644,14 @@
                                             <button onClick={() => setIsPickingHymns(false)} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200"><Icon name="chevron-left" className="w-4 h-4" /></button>
                                             <p className="text-[10px] font-black text-slate-400 uppercase">Voltar ao Culto</p>
                                         </div>
-                                        <div className="relative"><Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" /><input type="text" placeholder="Filtrar do repertório..." className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 pl-11 pr-4 text-sm font-semibold outline-none focus:border-indigo-500 transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+                                        <div className="relative"><Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 group-focus-within:text-indigo-400 transition-colors" /><input type="text" placeholder="Filtrar do repertório..." className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 pl-11 pr-4 text-sm font-semibold outline-none focus:border-indigo-500 transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
                                         <div className="max-h-[50vh] overflow-y-auto custom-scrollbar space-y-2 p-1">
                                             {(searchTerm ? allHymns.filter(h => (h.displayName || h.name || '').toLowerCase().includes(searchTerm.toLowerCase())) : []).map(h => {
                                                 const isSelected = (agendaData[selectedDate]?.hymns || []).some(ah => ah.id === h.id);
-                                                const displayCat = h.displayCategory || h.category || 'jovens';
-                                                return (<button key={h.id} onClick={() => toggleAgendaHymn(h)} className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${isSelected ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' : 'bg-white border-slate-50 text-slate-600 hover:border-indigo-100'}`}><div className="text-left"><p className="text-[11px] font-black uppercase tracking-tight">{h.displayName || h.name}</p><span className={`text-[7px] font-black px-1 py-0.5 rounded uppercase ${CATEGORY_LABELS[displayCat]?.light || 'bg-slate-100'}`}>{CATEGORY_LABELS[displayCat]?.label || 'Livre'}</span></div><Icon name={isSelected ? "check-circle" : "plus-circle"} className="w-5 h-5" /></button>);
+                                                // Resolve category dynamically to show correctly in the list
+                                                const s = hymnSettings[h.id];
+                                                const displayCat = s?.category || h.displayCategory || h.category || 'jovens';
+                                                return (<button key={h.id} onClick={() => toggleAgendaHymn(h)} className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${isSelected ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm' : 'bg-white border-slate-50 text-slate-600 hover:border-indigo-100'}`}><div className="text-left"><p className="text-[11px] font-black uppercase tracking-tight">{s?.name || h.displayName || h.name}</p><span className={`text-[7px] font-black px-1 py-0.5 rounded uppercase ${CATEGORY_LABELS[displayCat]?.light || 'bg-slate-100'}`}>{CATEGORY_LABELS[displayCat]?.label || 'Livre'}</span></div><Icon name={isSelected ? "check-circle" : "plus-circle"} className="w-5 h-5" /></button>);
                                             })}
                                         </div>
                                         <button onClick={() => setIsPickingHymns(false)} className="w-full py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl shadow-xl active:scale-95 mt-4">Confirmar Hinos</button>
@@ -640,7 +664,7 @@
                     {modals.regentes && (
                         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-in">
                             <div className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl border border-white/20 max-h-[85vh] flex flex-col">
-                                <div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-black text-slate-800 tracking-tight uppercase">REGENTES</h3><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Base de Dados</p></div><button onClick={() => setModals({...modals, regentes: false})} className="p-2 bg-slate-100 text-slate-400 rounded-full"><Icon name="x" className="w-5 h-5" /></button></div>
+                                <div className="flex justify-between items-center mb-6"><div><h3 className="text-lg font-black text-slate-800 tracking-tight uppercase">REGENTES</h3><p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Base de Dados</p></div><button onClick={() => setModals({...modals, regentes: false})} className="p-2 bg-slate-100 text-slate-400 rounded-full hover:bg-slate-200"><Icon name="x" className="w-5 h-5" /></button></div>
                                 <form onSubmit={handleAddRegente} className="mb-6 space-y-3 p-4 bg-slate-50 rounded-[24px] border border-slate-100">
                                     <input required className="w-full bg-white border-2 border-slate-100 rounded-xl py-3 px-4 text-sm font-bold outline-none focus:border-indigo-500" placeholder="Nome" value={regenteForm.name} onChange={e => setRegenteForm({...regenteForm, name: e.target.value})} />
                                     <div className="flex gap-2">
@@ -687,7 +711,7 @@
                         <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-950/40 backdrop-blur-md animate-in p-0 sm:p-4">
                             <div className="bg-white w-full max-w-lg rounded-t-[40px] sm:rounded-[32px] p-6 sm:p-8 shadow-2xl overflow-y-auto max-h-[95vh] custom-scrollbar border border-white/20">
                                 <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6 sm:hidden"></div>
-                                <div className="flex justify-between items-center mb-8"><div><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">EDITAR LOUVOR</h3></div><button onClick={() => setSelectedHymn(null)} className="p-3 bg-slate-100 text-slate-400 rounded-full"><Icon name="x" className="w-5 h-5" /></button></div>
+                                <div className="flex justify-between items-center mb-8"><div><h3 className="text-xl font-black text-slate-800 tracking-tight uppercase">EDITAR LOUVOR</h3></div><button onClick={() => setSelectedHymn(null)} className="p-3 bg-slate-100 text-slate-400 rounded-full"><Icon name="x" className="x-5 h-5" /></button></div>
                                 <div className="space-y-6">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div className="space-y-2"><label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1">Título</label><input type="text" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3.5 px-5 text-sm font-bold focus:border-indigo-500 outline-none transition-all outline-none" value={tempData.name} onChange={e => setTempData({...tempData, name: e.target.value})} /></div>
@@ -697,7 +721,7 @@
                                     <div className="space-y-2"><label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1">Categoria</label><div className="grid grid-cols-3 gap-2">{Object.keys(CATEGORY_LABELS).map(c => <button key={c} type="button" onClick={() => setTempData({...tempData, category: c})} className={`py-4 rounded-2xl text-[9px] font-black uppercase border-2 transition-all ${tempData.category === c ? CATEGORY_LABELS[c].color + ' border-transparent text-white shadow-lg' : 'border-slate-100 text-slate-400'}`}>{CATEGORY_LABELS[c].label}</button>)}</div></div>
                                     <div className="space-y-2"><label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest px-1 block">Tom</label><div className="grid grid-cols-6 gap-2 p-3 bg-slate-50 rounded-[24px] border border-slate-100 max-h-48 overflow-y-auto custom-scrollbar">{HARMONIC_SCALE.map(note => <button key={note} onClick={() => setTempData({...tempData, key: note})} className={`py-2.5 rounded-xl font-black text-[10px] transition-all border-2 ${tempData.key === note ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white text-slate-400 border-white hover:border-indigo-100'}`}>{note}</button>)}</div></div>
                                 </div>
-                                <div className="flex gap-4 mt-10 safe-pb"><button onClick={() => setSelectedHymn(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 text-[11px] font-black uppercase rounded-2xl">Voltar</button><button onClick={handleSaveSettings} disabled={isSaving} className="flex-[2] py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl shadow-xl active:scale-95 transition-all">Guardar</button></div>
+                                <div className="flex gap-4 mt-10 safe-pb"><button onClick={() => setSelectedHymn(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 text-[11px] font-black uppercase rounded-2xl shadow-sm">Voltar</button><button onClick={handleSaveSettings} disabled={isSaving} className="flex-[2] py-4 bg-indigo-700 text-white text-[11px] font-black uppercase rounded-2xl shadow-xl active:scale-95 transition-all">Guardar</button></div>
                             </div>
                         </div>
                     )}
